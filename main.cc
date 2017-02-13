@@ -116,5 +116,5 @@ int main(int argc, char* argv[]) {
   // Setup a render requests.
   RenderRequests render_requests;
   generate_render_requests(&mesh, 10, &render_requests);
-	run_viewer(mesh, render_requests);
+  run_viewer(mesh, render_requests);
 }
