@@ -34,7 +34,6 @@ struct RenderRequest {
 // Render requests are grouped into batches.
 struct RenderRequests {
   std::vector<RenderRequest> request_list;
-  int current;
 };
 
 // Generate a batch of render requests.
@@ -42,7 +41,7 @@ struct RenderRequests {
 void generate_render_requests(const Mesh* mesh, int n,
 			      RenderRequests* requests) {
   Eigen::Vector3d center = 0.5 * (mesh->bounds.lo + mesh->bounds.hi);
-  double radius = 2.0 * (mesh->bounds.hi - mesh->bounds.lo).norm();
+  double radius = 2.5 * (mesh->bounds.hi - mesh->bounds.lo).norm();
   double u = 0.0, theta = 0.0;
   srand(0);
   RenderRequest request;
@@ -65,33 +64,39 @@ void generate_render_requests(const Mesh* mesh, int n,
     request.right = request.forward.cross(request.up);
     requests->request_list.push_back(request);
   }
-  requests->current = 0;
-  std::cout << "Generated " << requests->request_list.size()
-	    << " render requests.";
 }
 
 // This callback will run until all requested views have been rendered.
-bool render_to_png(igl::viewer::Viewer& viewer, const Mesh* mesh,
+bool render_to_png(igl::viewer::Viewer& viewer, const Mesh* mesh, int which,
 		   RenderRequests* requests) {
-  if (requests->current < requests->request_list.size()) {
-    // Allocate temporary buffers.
-    Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(1280, 800);
-    Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(1280, 800);
-    Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(1280, 800);
-    Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(1280, 800);
+  // Allocate temporary buffers.
+  Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(1280, 800);
+  Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(1280, 800);
+  Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(1280, 800);
+  Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(1280, 800);
 
-    // Draw the scene in the buffers.
-    viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
+  // Draw the scene in the buffers.
+  RenderRequest* request = &requests->request_list[which];
+  viewer.core.camera_eye = request->eye.cast<float>();
+  viewer.core.camera_up = request->up.cast<float>();
+  viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
-    // Save it to a PNG.
-    igl::png::writePNG(R, G, B, A,
-		       "out" + std::to_string(requests->current) + ".png");
-    std::cout << "Rendered " << requests->current << " of "
-	      << requests->request_list.size();
+  // Save it to a PNG.
+  igl::png::writePNG(R, G, B, A, "out" + std::to_string(which) + ".png");
+  return false;
+}
 
-    ++requests->current;
+void run_viewer(Mesh& mesh, RenderRequests& render_requests) {
+  // Plot the mesh.
+  igl::viewer::Viewer viewer;			    // Create a viewer.
+  viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
+  for (int i = 0; i < 10; ++i) {
+    viewer.callback_post_draw = std::bind(render_to_png, _1, &mesh, i,
+					  &render_requests);  // Bind callback.
+    viewer.launch_init(false, false);
+    viewer.launch_rendering(false);  // Run.
+    viewer.launch_shut();
   }
-  return true;
 }
 
 int main(int argc, char* argv[]) {
@@ -111,11 +116,5 @@ int main(int argc, char* argv[]) {
   // Setup a render requests.
   RenderRequests render_requests;
   generate_render_requests(&mesh, 10, &render_requests);
-
-  // Plot the mesh.
-  igl::viewer::Viewer viewer;  // Create a viewer.
-  viewer.callback_post_draw =
-      std::bind(render_to_png, _1, &mesh, &render_requests);  // Bind callback.
-  viewer.data.set_mesh(mesh.vertices, mesh.faces);	    // Set mesh data.
-  viewer.launch();					      // Run.
+	run_viewer(mesh, render_requests);
 }
