@@ -14,7 +14,7 @@ height = sys.argv[6]
 if (not os.path.isabs(root_output_dir)):
     root_output_dir = os.getcwd() + '/' + root_output_dir
 
-bin_path = os.getcwd() + '/build/bin/main'
+bin_path = os.getcwd() + '/build/bin/render_views'
 
 root_output_dir = os.path.abspath(root_output_dir)
 

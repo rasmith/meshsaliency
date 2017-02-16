@@ -37,8 +37,8 @@ message(STATUS "EIGEN3_INCLUDE_DIRS=${EIGEN3_INCLUDE_DIRS}")
 message(STATUS "LIBIGL_PNG_EXTRA_LIBRARIES=${LIBIGL_PNG_EXTRA_LIBRARIES}")
 
 # Compile and link main.
-add_executable(main main.cc)
-target_link_libraries(main ${LIBIGL_LIBRARIES}
+add_executable(render_views render_views.cc)
+target_link_libraries(render_views ${LIBIGL_LIBRARIES}
                            ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
                            ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
                            ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
