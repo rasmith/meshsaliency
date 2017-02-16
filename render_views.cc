@@ -199,6 +199,7 @@ void run_viewer(Mesh& mesh, RenderRequests& render_requests) {
   // Plot the mesh.
   igl::viewer::Viewer viewer;			    // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
+  viewer.core.show_lines = false;
   viewer.callback_init = viewer_init;
   viewer.callback_pre_draw = std::bind(viewer_pre_draw, _1, &mesh,
 				       &render_requests);  // Bind callback.
