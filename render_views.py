@@ -4,11 +4,12 @@ import sys
 import subprocess
 from multiprocessing import Pool
 
-width = 256
-height = 256
-
-root_input_dir = os.path.abspath(sys.argv[1]);
-root_output_dir = sys.argv[2];
+root_input_dir = os.path.abspath(sys.argv[1])
+root_output_dir = sys.argv[2]
+sample_type = sys.argv[3]
+num_samples = sys.argv[4]
+width = sys.argv[5]
+height = sys.argv[6]
 
 if (not os.path.isabs(root_output_dir)):
     root_output_dir = os.getcwd() + '/' + root_output_dir
@@ -22,8 +23,8 @@ print('Root output dir: %s' % root_output_dir)
 
 def render_views(arg):
     input_path, output_path, image_width, image_height = arg
-    subprocess.call([bin_path, input_path, output_path, str(image_width),\
-        str(image_height)])
+    subprocess.call([bin_path, input_path, output_path, sample_type,\
+        num_samples, str(image_width),str(image_height)])
 
 if __name__ == '__main__':
     pool = Pool(processes=4)  

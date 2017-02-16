@@ -44,25 +44,70 @@ struct RenderRequests {
   int which;
 };
 
-// Generate a batch of render requests.
-// Using the input mesh, there will be n requests generated.
-void generate_render_requests(const Mesh* mesh, int n,
-			      RenderRequests* requests) {
-  Eigen::Vector3d center = 0.5 * (mesh->bounds.lo + mesh->bounds.hi);
-  double radius = 2.5 * (mesh->bounds.hi - mesh->bounds.lo).norm();
+enum RenderSampleType {
+  kUniformRandomSample,
+  kIcosahedronSample,
+  kNumRenderSampleTypes
+};
+
+void generate_uniform_random_samples(int num_samples,
+				     std::vector<Eigen::Vector3d>* samples) {
   double u = 0.0, theta = 0.0;
   srand(0);
-  RenderRequest request;
-  requests->request_list.clear();
-  for (int i = 0; i < n; ++i) {
+  samples->clear();
+  for (int i = 0; i < num_samples; ++i) {
     // Get a random number [-1, 1].
     u = -1.0 + (2.0 * rand()) / RAND_MAX;
     // Get a random number [0, 2 * PI].
     theta = 2.0 * (2.0 * rand()) / RAND_MAX * kPi;
     // Generate the eye location.
     double v = sqrt(1 - u * u);
-    request.eye = Eigen::Vector3d(v * cos(theta), v * sin(theta), u);
-    request.eye *= radius;
+    samples->push_back(Eigen::Vector3d(v * cos(theta), v * sin(theta), u));
+  }
+}
+
+void generate_icosahedron_samples(std::vector<Eigen::Vector3d>* samples) {
+  const double kGoldenRatio = 1.61803398875;
+  const Eigen::Vector3d kIcosahedronVertices[12] = {
+      {-1.0, kGoldenRatio, 0.0},  {1.0, kGoldenRatio, 0.0},
+      {-1.0, -kGoldenRatio, 0.0}, {1.0, -kGoldenRatio, 0.0},
+      {0.0, -1.0, kGoldenRatio},  {0.0, 1.0, kGoldenRatio},
+      {0.0, -1.0, -kGoldenRatio}, {0.0, 1.0, -kGoldenRatio},
+      {kGoldenRatio, 0.0, -1.0},  {kGoldenRatio, 0.0, 1.0},
+      {-kGoldenRatio, 0.0, -1.0}, {-kGoldenRatio, 0.0, 1.0},
+  };
+  samples->clear();
+  for (int i = 0; i < 12; ++i) samples->push_back(kIcosahedronVertices[i]);
+}
+
+// Generate a batch of render requests.
+// Using the input mesh, there will be n requests generated.
+void generate_render_requests(const Mesh* mesh, RenderSampleType sample_type,
+			      int num_samples, RenderRequests* requests) {
+  // Get the center to use.
+  Eigen::Vector3d center = 0.5 * (mesh->bounds.lo + mesh->bounds.hi);
+  // Get thr radius to use.
+  double radius = 2.5 * (mesh->bounds.hi - mesh->bounds.lo).norm();
+
+  // Generate samples.
+  std::vector<Eigen::Vector3d> samples;
+  switch (sample_type) {
+    case kIcosahedronSample:
+      generate_icosahedron_samples(&samples);
+      break;
+    case kUniformRandomSample:
+    default:
+      generate_uniform_random_samples(num_samples, &samples);
+      break;
+  }
+
+  // Generate render views based on the choice of sampling.
+  RenderRequest request;
+  requests->request_list.clear();
+
+  for (int i = 0; i < samples.size(); ++i) {
+    // Get the eye location.
+    request.eye = center + radius * samples[i];
     // Generate the forward direction.
     request.forward = (center - request.eye).normalized();
     // Generate the up direction
@@ -71,8 +116,8 @@ void generate_render_requests(const Mesh* mesh, int n,
     // Generate the right direction.
     request.right = request.forward.cross(request.up);
     requests->request_list.push_back(request);
-    requests->which = 0;
   }
+  requests->which = 0;
 }
 
 bool viewer_init(igl::viewer::Viewer& viewer) {
@@ -139,15 +184,24 @@ void run_viewer(Mesh& mesh, RenderRequests& render_requests) {
 }
 
 int main(int argc, char* argv[]) {
+  int argv_index = 0;
+
   // Get the file path to load (supports .OFF right now).
-  std::string model_path(argv[1]);
+  std::string model_path(argv[++argv_index]);
 
   // Get the output directory.
-  output_directory = std::string(argv[2]);
+  output_directory = std::string(argv[++argv_index]);
+
+  // Get the sample type.
+  RenderSampleType sample_type =
+      static_cast<RenderSampleType>(std::stoi(std::string(argv[++argv_index])));
+
+  // Get num samples.
+  int num_samples = std::stoi(std::string(argv[++argv_index]));
 
   // Get the window width and height and save it.
-  window_width = std::stoi(std::string(argv[3]));
-  window_height = std::stoi(std::string(argv[4]));
+  window_width = std::stoi(std::string(argv[++argv_index]));
+  window_height = std::stoi(std::string(argv[++argv_index]));
 
   // Make a mesh struct.
   Mesh mesh;
@@ -161,6 +215,6 @@ int main(int argc, char* argv[]) {
 
   // Setup a render requests.
   RenderRequests render_requests;
-  generate_render_requests(&mesh, 25, &render_requests);
+  generate_render_requests(&mesh, sample_type, num_samples, &render_requests);
   run_viewer(mesh, render_requests);
 }
