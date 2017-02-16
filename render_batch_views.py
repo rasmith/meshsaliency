@@ -4,6 +4,28 @@ import sys
 import subprocess
 from multiprocessing import Pool
 
+'''
+ Usage: 
+ ./render_views <input_directory> <output_directory> <sample_type>
+                <num_samples> <width> <height>
+  input_directory - root input path to the models to render [.OFF]
+  output_directory - root output path directory for rendered views
+  sample_type - type of sampling to use:
+              - 0 : sample the vertices of an icosahedron
+              - 1 : sample the vertices of a cylinder with <num_samples>
+                    samples.
+              - 2 : sample a sphere uniformly at random using <num_samples>
+                    samples.
+ num_samples - number of samples to use, only useful for sample_type = 1,2.
+ width - output image width
+ height - output image height
+
+ If a model file is at 
+        <input_directory>/path/to/model.off, then the output
+ will be placed in 
+        <output_directory>/path/to/model.off.
+ '''
+
 root_input_dir = os.path.abspath(sys.argv[1])
 root_output_dir = sys.argv[2]
 sample_type = sys.argv[3]

@@ -49,12 +49,25 @@ cmake ..
 
 ### Running
 
-The main program loads an [OFF](http://www.geomview.org/docs/html/OFF.html)
-file and runs the libigl viewer.
+The render_views program loads an 
+[OFF](http://www.geomview.org/docs/html/OFF.html) file and runs the libigl
+viewer.
 
 This is done by typing in the build directory
 ```
-bin/main path/to/file/mesh.off
+// ./bin/render_views <model_path> <output_directory> <sample_type>
+//                    <num_samples> <width> <height>
+//  model_path - path to the model file to render [.OFF]
+//  output_directory - path to the directory for rendered views
+//  sample_type - type of sampling to use:
+//              - 0 : sample the vertices of an icosahedron
+//              - 1 : sample the vertices of a cylinder with <num_samples>
+//                    samples.
+//              - 2 : sample a sphere uniformly at random using <num_samples>
+//                    samples.
+// num_samples - number of samples to use, only useful for sample_type = 1,2.
+// width - output image width
+// height - output image height
 ```
 and currently a window is launched.
 
