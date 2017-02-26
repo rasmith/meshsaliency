@@ -1,5 +1,10 @@
 #Mesh Saliency
 
+#Names
+Hari Sridhar
+Randall 
+Soumyajit Gupta
+
 ## Introduction
 Not much to say yet!
 
