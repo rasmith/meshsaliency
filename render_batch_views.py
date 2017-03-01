@@ -49,20 +49,21 @@ def render_views(arg):
         num_samples, str(image_width),str(image_height)])
 
 if __name__ == '__main__':
-    pool = Pool(processes=4)  
+    pool = Pool(processes=8)  
     worklist = []
     for dir_name, dir_list, file_list in os.walk(root_input_dir):
         dir_name=os.path.abspath(dir_name)
-        print('Found dir: %s' % dir_name)
+#        print('Found dir: %s' % dir_name)
         for file_name in file_list:
             name, extension = os.path.splitext(file_name)
             if extension == '.off':
-                print('\tname=%s ext=%s' % (name, extension))
+#                print('\tname=%s ext=%s' % (name, extension))
                 input_path = dir_name + '/' + file_name
                 output_path=dir_name[len(root_input_dir)+1:]
                 full_output_path = root_output_dir + '/' + output_path
                 if not os.path.exists(full_output_path):
-                    os.makedirs(full_output_path)
-                print('\toutput_path=%s/%s' % (root_output_dir, output_path))
+                    os.makedirs(full_output_path + '/png/')
+                    os.makedirs(full_output_path + '/cfg')
+#                print('\toutput_path=%s/%s' % (root_output_dir, output_path))
                 worklist.append((input_path, full_output_path, width, height))
     pool.map(render_views, worklist)

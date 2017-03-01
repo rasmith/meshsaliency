@@ -11,6 +11,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 											${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
+
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
+
 # Find libigl.
 find_package(LIBIGL REQUIRED)
 
@@ -36,9 +39,17 @@ message(STATUS "EIGEN3_INCLUDE_DIRS=${EIGEN3_INCLUDE_DIRS}")
 
 message(STATUS "LIBIGL_PNG_EXTRA_LIBRARIES=${LIBIGL_PNG_EXTRA_LIBRARIES}")
 
-# Compile and link main.
+# Compile and link render_views executable.
 add_executable(render_views render_views.cc)
 target_link_libraries(render_views ${LIBIGL_LIBRARIES}
+                           ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
+                           ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
+                           ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
+													 ${LIBIGL_PNG_EXTRA_LIBRARIES})
+
+# Compile and link backproject_saliency executable.
+add_executable(backproject_saliency backproject_saliency.cc)
+target_link_libraries(backproject_saliency ${LIBIGL_LIBRARIES}
                            ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
                            ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
                            ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
