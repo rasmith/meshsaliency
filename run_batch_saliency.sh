@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 
 # Usage:  
-# ./run_batch_saliency.sh
+# ./run_batch_saliency.sh <input_directory>
+# input_directory - directory output from run_batch_views.py
+#
+# This will run saliency on all of the png files output to the tree
+# contained at <input_directory>.
+
 # This script uses:
 #    https://github.com/marcellacornia/mlnet
 #
