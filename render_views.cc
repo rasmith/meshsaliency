@@ -11,7 +11,6 @@
 #include <igl/readOFF.h>
 #include <igl/viewer/Viewer.h>
 
-
 const double kPi = 3.14159265359;
 const double kGoldenRatio = 1.61803398875;
 
@@ -47,8 +46,8 @@ enum RenderSampleType {
 };
 
 // Generate uniform randle samples.
-void generate_uniform_random_samples(int num_samples,
-                                     std::vector<Eigen::Vector3d>* samples) {
+void GenerateUniformRandomSamples(int num_samples,
+				  std::vector<Eigen::Vector3d>* samples) {
   double u = 0.0, theta = 0.0;
   srand(0);
   samples->clear();
@@ -64,8 +63,8 @@ void generate_uniform_random_samples(int num_samples,
 }
 
 // Generate cylindrical samples in the XZ plane.
-void generate_cylindrical_samples(int num_samples,
-                                  std::vector<Eigen::Vector3d>* samples) {
+void GenerateCylindricalSamples(int num_samples,
+				std::vector<Eigen::Vector3d>* samples) {
   double delta = 2.0 * kPi / num_samples, theta = 0.0;
   samples->clear();
   for (int i = 0; i < num_samples; ++i) {
@@ -75,7 +74,7 @@ void generate_cylindrical_samples(int num_samples,
 }
 
 // Generate samples using the vertices of an icosahedron.
-void generate_icosahedron_samples(std::vector<Eigen::Vector3d>* samples) {
+void GenerateIcosahedronSamples(std::vector<Eigen::Vector3d>* samples) {
   static const Eigen::Vector3d kIcosahedronVertices[12] = {
       {-1.0, kGoldenRatio, 0.0},  {1.0, kGoldenRatio, 0.0},
       {-1.0, -kGoldenRatio, 0.0}, {1.0, -kGoldenRatio, 0.0},
@@ -90,8 +89,8 @@ void generate_icosahedron_samples(std::vector<Eigen::Vector3d>* samples) {
 
 // Generate a batch of render requests.
 // Using the input mesh, there will be n requests generated.
-void generate_render_requests(const Mesh* mesh, RenderSampleType sample_type,
-                              int num_samples, RenderRequests* requests) {
+void GenerateRenderRequests(const Mesh* mesh, RenderSampleType sample_type,
+			    int num_samples, RenderRequests* requests) {
   // The radius to use.
   double radius = 4.0;
 
@@ -99,14 +98,14 @@ void generate_render_requests(const Mesh* mesh, RenderSampleType sample_type,
   std::vector<Eigen::Vector3d> samples;
   switch (sample_type) {
     case kIcosahedronSample:
-      generate_icosahedron_samples(&samples);
+      GenerateIcosahedronSamples(&samples);
       break;
     case kCylinderSample:
-      generate_cylindrical_samples(num_samples, &samples);
+      GenerateCylindricalSamples(num_samples, &samples);
       break;
     case kUniformRandomSample:
     default:
-      generate_uniform_random_samples(num_samples, &samples);
+      GenerateUniformRandomSamples(num_samples, &samples);
       break;
   }
 
@@ -129,7 +128,7 @@ void generate_render_requests(const Mesh* mesh, RenderSampleType sample_type,
 }
 
 // This is the Viewer initialization callback.
-bool viewer_init(igl::viewer::Viewer& viewer) {
+bool ViewerInit(igl::viewer::Viewer& viewer) {
   // Set the window size and viewport before drawing begins.
   glfwSetWindowSize(viewer.window, window_width, window_height);
   glViewport(0, 0, window_width, window_height);
@@ -137,8 +136,8 @@ bool viewer_init(igl::viewer::Viewer& viewer) {
 }
 
 // This is a pre render callback for the Viewr class.
-bool viewer_pre_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
-                     RenderRequests* requests) {
+bool ViewerPreDraw(igl::viewer::Viewer& viewer, const Mesh* mesh,
+		   RenderRequests* requests) {
   if (requests->which >= requests->request_list.size()) return false;
   // If we have something to do, then setup the next render.
   RenderRequest* request = &requests->request_list[requests->which];
@@ -147,8 +146,8 @@ bool viewer_pre_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
   return false;
 }
 
-void save_viewer_settings(const igl::viewer::Viewer& viewer,
-                          const std::string& file_name) {
+void SaveViewerSettings(const igl::viewer::Viewer& viewer,
+			const std::string& file_name) {
   std::ofstream out(file_name);
   Eigen::IOFormat format(Eigen::FullPrecision, 0, ",", ",");
   out << "width " << window_width << "\n";
@@ -164,8 +163,8 @@ void save_viewer_settings(const igl::viewer::Viewer& viewer,
 }
 
 // This callback will run until all requested views have been rendered.
-bool viewer_post_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
-                      RenderRequests* requests) {
+bool ViewerPostDraw(igl::viewer::Viewer& viewer, const Mesh* mesh,
+		    RenderRequests* requests) {
   // If no more views to render, make sure the Viewer class exits.
   if (requests->which >= requests->request_list.size()) {
     // This tells GLFW to close, the main render loop in Viewer will halt.
@@ -177,13 +176,13 @@ bool viewer_post_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
 
   // Allocate temporary buffers.
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(window_width,
-                                                                 window_height);
+								 window_height);
 
   // Draw the scene in the buffers.
   RenderRequest* request = &requests->request_list[requests->which];
@@ -192,10 +191,10 @@ bool viewer_post_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
   std::string which_str = std::to_string(requests->which);
   // Save it to a PNG.
   igl::png::writePNG(R, G, B, A,
-                     output_directory + "/png/out" + which_str + ".png");
+		     output_directory + "/png/out" + which_str + ".png");
   // Save the camera settings.
-  save_viewer_settings(viewer,
-                       output_directory + "/cfg/camera" + which_str + ".cfg");
+  SaveViewerSettings(viewer,
+		     output_directory + "/cfg/camera" + which_str + ".cfg");
   ++requests->which;
 
   // Post an empty event so igl::viewer::Viewer will continue to pump events
@@ -205,16 +204,16 @@ bool viewer_post_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
 }
 
 // Here, the viewer is launched and the views are rendered.
-void run_viewer(Mesh& mesh, RenderRequests& render_requests) {
+void RunViewer(Mesh& mesh, RenderRequests& render_requests) {
   // Plot the mesh.
-  igl::viewer::Viewer viewer;                       // Create a viewer.
+  igl::viewer::Viewer viewer;			    // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   viewer.core.show_lines = false;
-  viewer.callback_init = viewer_init;
-  viewer.callback_pre_draw = std::bind(viewer_pre_draw, _1, &mesh,
-                                       &render_requests);  // Bind callback.
-  viewer.callback_post_draw = std::bind(viewer_post_draw, _1, &mesh,
-                                        &render_requests);  // Bind callback.
+  viewer.callback_init = ViewerInit;
+  viewer.callback_pre_draw = std::bind(ViewerPreDraw, _1, &mesh,
+				       &render_requests);  // Bind callback.
+  viewer.callback_post_draw = std::bind(ViewerPostDraw, _1, &mesh,
+					&render_requests);  // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -275,7 +274,7 @@ int main(int argc, char* argv[]) {
 
   // Setup a render requests.
   RenderRequests render_requests;
-  generate_render_requests(&mesh, sample_type, num_samples, &render_requests);
-  run_viewer(mesh, render_requests);
+  GenerateRenderRequests(&mesh, sample_type, num_samples, &render_requests);
+  RunViewer(mesh, render_requests);
   return 0;
 }

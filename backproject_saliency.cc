@@ -1,4 +1,6 @@
+#include "common.h"
 #include "geometry.h"
+#include "logger.h"
 #include "render_request.h"
 
 #include <functional>
@@ -21,41 +23,76 @@ using std::placeholders::_1;
 int window_width = 256;
 int window_height = 256;
 
-std::string output_directory;
+std::string input_directory;
 
-void gather_samples(std::vector<Eigen::Vector3d>* samples) {}
+template <typename ValueType>
+void ReadConfigValue(const std::string& input_field_value,
+		     ValueType& field_value) {
+  std::stringstream stream;
+  stream.str(input_field_value);
+  stream >> field_value;
+}
+
+template <>
+void ReadConfigValue<Eigen::Vector3d>(const std::string& input_field_value,
+				      Eigen::Vector3d& field_value) {
+  std::stringstream stream;
+  stream.str(input_field_value);
+  char sep = ',';
+  stream >> field_value[0] >> sep >> field_value[1] >> sep >> field_value[2];
+}
+
+template <typename ValueType>
+void ReadConfigLine(std::ifstream& ifs, const std::string& field_name,
+		    ValueType& field_value) {
+  std::string input_field_name, input_field_value;
+  CHECK_TRUE(field_name == input_field_name);
+  ifs >> input_field_name >> input_field_value;
+  ReadConfigValue<ValueType>(input_field_value, field_value);
+}
+
+void ReadCameraConfig(std::ifstream& camera_file, RenderRequest* request) {
+  ReadConfigLine<int>(camera_file, "width", request->width);
+  ReadConfigLine<int>(camera_file, "height", request->height);
+  ReadConfigLine<Eigen::Vector3d>(camera_file, "eye", request->eye);
+  ReadConfigLine<Eigen::Vector3d>(camera_file, "up", request->up);
+  ReadConfigLine<bool>(camera_file, "orthographic", request->orthographic);
+  ReadConfigLine<double>(camera_file, "near", request->near);
+  ReadConfigLine<double>(camera_file, "far", request->far);
+  ReadConfigLine<double>(camera_file, "view_angle", request->view_angle);
+  ReadConfigLine<Eigen::Vector3d>(camera_file, "camera_center",
+				  request->camera_center);
+}
 
 // Generate a batch of render requests.
 // Using the input mesh, there will be n requests generated.
-void generate_render_requests(const Mesh* mesh, RenderSampleType sample_type,
-                              RenderRequests* requests) {
-  // The radius to use.
-  double radius = 4.0;
+void GenerateRenderRequests(const Mesh* mesh,
+			    const std::string& input_directory,
+			    RenderRequests* requests) {
+  std::string camera_path = input_directory + "/camera0.cfg";
+  std::string saliency_path = input_directory + "/saliency0.jpg";
+  std::ifstream camera_file(camera_path);
+  std::ifstream saliency_file(saliency_path);
 
-  // Generate samples.
-  std::vector<Eigen::Vector3d> samples;
-  gather_samples(&samples);
-
-  // Generate render views based on the choice of sampling.
-  RenderRequest request;
-  requests->request_list.clear();
-
-  for (int i = 0; i < samples.size(); ++i) {
-    // Get the eye location.
-    request.eye = radius * samples[i];
-    // Generate the forward direction.
-    request.forward = request.eye.normalized();
-    // Generate the up direction
-    request.up = Eigen::Vector3d(0.0, 1.0, 0.0);
-    // Generate the right direction.
-    request.right = request.forward.cross(request.up);
+  int i = 0;
+  while (camera_file.good()) {
+    RenderRequest request;
+    ReadCameraConfig(camera_file, &request);
     requests->request_list.push_back(request);
+
+    camera_file.close();
+    saliency_file.close();
+
+    camera_path = input_directory + "/camera" + std::to_string(i) + ".cfg";
+    saliency_path = input_directory + "/saliency" + std::to_string(i) + ".cfg";
+
+    camera_file.open(camera_path);
+    saliency_file.open(saliency_path);
   }
-  requests->which = 0;
 }
 
 // This is the Viewer initialization callback.
-bool viewer_init(igl::viewer::Viewer& viewer) {
+bool ViewerInit(igl::viewer::Viewer& viewer) {
   // Set the window size and viewport before drawing begins.
   glfwSetWindowSize(viewer.window, window_width, window_height);
   glViewport(0, 0, window_width, window_height);
@@ -63,8 +100,8 @@ bool viewer_init(igl::viewer::Viewer& viewer) {
 }
 
 // This is a pre render callback for the Viewr class.
-bool viewer_pre_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
-                     RenderRequests* requests) {
+bool ViewerPreDraw(igl::viewer::Viewer& viewer, const Mesh* mesh,
+		   RenderRequests* requests) {
   if (requests->which >= requests->request_list.size()) return false;
   // If we have something to do, then setup the next render.
   RenderRequest* request = &requests->request_list[requests->which];
@@ -73,25 +110,9 @@ bool viewer_pre_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
   return false;
 }
 
-void save_viewer_settings(const igl::viewer::Viewer& viewer,
-                          const std::string& file_name) {
-  std::ofstream out(file_name);
-  Eigen::IOFormat format(Eigen::FullPrecision, 0, ",", ",");
-  out << "width " << window_width << "\n";
-  out << "height " << window_height << "\n";
-  out << "eye  " << viewer.core.camera_eye.format(format) << "\n";
-  out << "up " << viewer.core.camera_up.format(format) << "\n";
-  out << "orthographic " << viewer.core.orthographic << "\n";
-  out << "near " << viewer.core.camera_dnear << "\n";
-  out << "far " << viewer.core.camera_dfar << "\n";
-  out << "view_angle " << viewer.core.camera_view_angle << "\n";
-  out << "camera_center " << viewer.core.camera_center.format(format) << "\n";
-  out.close();
-}
-
 // This callback will run until all requested views have been rendered.
-bool viewer_post_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
-                      RenderRequests* requests) {
+bool ViewerPostDraw(igl::viewer::Viewer& viewer, const Mesh* mesh,
+		    RenderRequests* requests) {
   // If no more views to render, make sure the Viewer class exits.
   if (requests->which >= requests->request_list.size()) {
     // This tells GLFW to close, the main render loop in Viewer will halt.
@@ -103,25 +124,19 @@ bool viewer_post_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
 
   // Allocate temporary buffers.
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(window_width,
-                                                                 window_height);
+								 window_height);
 
   // Draw the scene in the buffers.
   RenderRequest* request = &requests->request_list[requests->which];
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
   std::string which_str = std::to_string(requests->which);
-  // Save it to a PNG.
-  igl::png::writePNG(R, G, B, A,
-                     output_directory + "/png/out" + which_str + ".png");
-  // Save the camera settings.
-  save_viewer_settings(viewer,
-                       output_directory + "/cfg/camera" + which_str + ".cfg");
   ++requests->which;
 
   // Post an empty event so igl::viewer::Viewer will continue to pump events
@@ -131,16 +146,16 @@ bool viewer_post_draw(igl::viewer::Viewer& viewer, const Mesh* mesh,
 }
 
 // Here, the viewer is launched and the views are rendered.
-void run_viewer(Mesh& mesh, RenderRequests& render_requests) {
+void RunViewer(Mesh& mesh, RenderRequests& render_requests) {
   // Plot the mesh.
-  igl::viewer::Viewer viewer;                       // Create a viewer.
+  igl::viewer::Viewer viewer;			    // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   viewer.core.show_lines = false;
-  viewer.callback_init = viewer_init;
-  viewer.callback_pre_draw = std::bind(viewer_pre_draw, _1, &mesh,
-                                       &render_requests);  // Bind callback.
-  viewer.callback_post_draw = std::bind(viewer_post_draw, _1, &mesh,
-                                        &render_requests);  // Bind callback.
+  viewer.callback_init = ViewerInit;
+  viewer.callback_pre_draw = std::bind(ViewerPreDraw, _1, &mesh,
+				       &render_requests);  // Bind callback.
+  viewer.callback_post_draw = std::bind(ViewerPostDraw, _1, &mesh,
+					&render_requests);  // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -155,12 +170,8 @@ int main(int argc, char* argv[]) {
   // Get the file path to load (supports .OFF right now).
   std::string model_path(argv[++argv_index]);
 
-  // Get the output directory.
-  output_directory = std::string(argv[++argv_index]);
-
-  // Get the sample type.
-  RenderSampleType sample_type =
-      static_cast<RenderSampleType>(std::stoi(std::string(argv[++argv_index])));
+  // Get the camera parameters file path.
+  std::string input_directory(argv[++argv_index]);
 
   // Make a mesh struct.
   Mesh mesh;
@@ -183,9 +194,17 @@ int main(int argc, char* argv[]) {
   mesh.bounds.hi /= extent;
   mesh.bounds.lo /= extent;
 
-  // Setup a render requests.
+  // Read in the input directory:
+  //    - there will be a triple:
+  //    - png/outXXX.png
+  //    - cfg/cameraXXX.png
+  //    - saliency/outXXX.jpg
+  //  Read in each triple and get the:
+  //    1) camera parameters used to render the image
+  //    2) the saliency map
   RenderRequests render_requests;
-  generate_render_requests(&mesh, sample_type, &render_requests);
-  run_viewer(mesh, render_requests);
+  LOG(DEBUG) << "Loading render requests\n";
+  GenerateRenderRequests(&mesh, input_directory, &render_requests);
+  RunViewer(mesh, render_requests);
   return 0;
 }

@@ -7,10 +7,15 @@ namespace render_request {
 
 // Each view will have a render request associated with it.
 struct RenderRequest {
+	int width;
+	int height;
   Eigen::Vector3d eye;
-  Eigen::Vector3d up;
-  Eigen::Vector3d right;
-  Eigen::Vector3d forward;
+  Eigen::Vector3d up;	
+	bool orthographic;	
+	double near;
+	double far;
+	double view_angle;
+  Eigen::Vector3d camera_center;	
 };
 
 // Render requests are grouped into batches.
