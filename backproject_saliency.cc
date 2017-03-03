@@ -15,10 +15,10 @@
 
 using geometry::BoundingBox;
 using geometry::Mesh;
+using std::placeholders::_1;
+using view_setting::RenderSampleType;
 using view_setting::ViewSetting;
 using view_setting::ViewSettings;
-using view_setting::RenderSampleType;
-using std::placeholders::_1;
 
 int window_width = 256;
 int window_height = 256;
