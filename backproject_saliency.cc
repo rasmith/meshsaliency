@@ -119,7 +119,11 @@ void GenerateViewSettings(const Mesh *mesh, const std::string &input_directory,
 }
 
 // This is the Viewer initialization callback.
-bool ViewerInit(igl::viewer::Viewer &viewer) {
+bool ViewerInit(igl::viewer::Viewer &viewer, ViewSettings *view_settings) {
+  ViewSetting *view_setting =
+      &view_settings->view_setting_list[view_settings->which];
+  window_width = view_setting->width;
+  window_height = view_setting->height;
   // Set the window size and viewport before drawing begins.
   glfwSetWindowSize(viewer.window, window_width, window_height);
   glViewport(0, 0, window_width, window_height);
@@ -136,6 +140,11 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
       &view_settings->view_setting_list[view_settings->which];
   viewer.core.camera_eye = view_setting->eye.cast<float>();
   viewer.core.camera_up = view_setting->up.cast<float>();
+  viewer.core.orthographic = view_setting->orthographic;
+  viewer.core.camera_dnear = view_setting->near;
+  viewer.core.camera_dfar = view_setting->far;
+  viewer.core.camera_view_angle = view_setting->view_angle;
+  viewer.core.camera_center = view_setting->camera_center.cast<float>();
   return false;
 }
 
@@ -181,7 +190,7 @@ void RunViewer(Mesh &mesh, ViewSettings &view_settings) {
   igl::viewer::Viewer viewer;                       // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   viewer.core.show_lines = false;
-  viewer.callback_init = ViewerInit;
+  viewer.callback_init = std::bind(ViewerInit, _1, &view_settings);
   viewer.callback_pre_draw = std::bind(ViewerPreDraw, _1, &mesh,
                                        &view_settings);  // Bind callback.
   viewer.callback_post_draw = std::bind(ViewerPostDraw, _1, &mesh,
