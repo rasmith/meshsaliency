@@ -3,10 +3,10 @@
 #include <Eigen/Dense>
 #include <vector>
 
-namespace render_request {
+namespace view_setting {
 
-// Each view will have a render request associated with it.
-struct RenderRequest {
+// Each view will have a render view_setting associated with it.
+struct ViewSetting {
   int width;
   int height;
   Eigen::Vector3d eye;
@@ -18,9 +18,9 @@ struct RenderRequest {
   Eigen::Vector3d camera_center;
 };
 
-// Render requests are grouped into batches.
-struct RenderRequests {
-  std::vector<RenderRequest> request_list;
+// Render view_settings are grouped into batches.
+struct ViewSettings {
+  std::vector<ViewSetting> view_setting_list;
   int which;
 };
 
@@ -33,4 +33,4 @@ enum RenderSampleType {
   kNumRenderSampleTypes
 };
 
-} // namespace render_request
+} // namespace view_setting

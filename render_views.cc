@@ -1,5 +1,5 @@
 #include "geometry.h"
-#include "render_request.h"
+#include "view_setting.h"
 
 #include <functional>
 #include <string>
@@ -23,17 +23,17 @@ int window_height = 256;
 
 std::string output_directory;
 
-// Each view will have a render request associated with it.
-struct RenderRequest {
+// Each view will have a render view_setting associated with it.
+struct ViewSetting {
   Eigen::Vector3d eye;
   Eigen::Vector3d up;
   Eigen::Vector3d right;
   Eigen::Vector3d forward;
 };
 
-// Render requests are grouped into batches.
-struct RenderRequests {
-  std::vector<RenderRequest> request_list;
+// Render view_settings are grouped into batches.
+struct ViewSettings {
+  std::vector<ViewSetting> view_setting_list;
   int which;
 };
 
@@ -88,10 +88,10 @@ void GenerateIcosahedronSamples(std::vector<Eigen::Vector3d> *samples) {
     samples->push_back(kIcosahedronVertices[i]);
 }
 
-// Generate a batch of render requests.
-// Using the input mesh, there will be n requests generated.
-void GenerateRenderRequests(const Mesh *mesh, RenderSampleType sample_type,
-                            int num_samples, RenderRequests *requests) {
+// Generate a batch of render view_settings.
+// Using the input mesh, there will be n view_settings generated.
+void GenerateViewSettings(const Mesh *mesh, RenderSampleType sample_type,
+                            int num_samples, ViewSettings *view_settings) {
   // The radius to use.
   double radius = 4.0;
 
@@ -111,21 +111,21 @@ void GenerateRenderRequests(const Mesh *mesh, RenderSampleType sample_type,
   }
 
   // Generate render views based on the choice of sampling.
-  RenderRequest request;
-  requests->request_list.clear();
+  ViewSetting view_setting;
+  view_settings->view_setting_list.clear();
 
   for (int i = 0; i < samples.size(); ++i) {
     // Get the eye location.
-    request.eye = radius * samples[i];
+    view_setting.eye = radius * samples[i];
     // Generate the forward direction.
-    request.forward = request.eye.normalized();
+    view_setting.forward = view_setting.eye.normalized();
     // Generate the up direction
-    request.up = Eigen::Vector3d(0.0, 1.0, 0.0);
+    view_setting.up = Eigen::Vector3d(0.0, 1.0, 0.0);
     // Generate the right direction.
-    request.right = request.forward.cross(request.up);
-    requests->request_list.push_back(request);
+    view_setting.right = view_setting.forward.cross(view_setting.up);
+    view_settings->view_setting_list.push_back(view_setting);
   }
-  requests->which = 0;
+  view_settings->which = 0;
 }
 
 // This is the Viewer initialization callback.
@@ -138,13 +138,13 @@ bool ViewerInit(igl::viewer::Viewer &viewer) {
 
 // This is a pre render callback for the Viewr class.
 bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-                   RenderRequests *requests) {
-  if (requests->which >= requests->request_list.size())
+                   ViewSettings *view_settings) {
+  if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   // If we have something to do, then setup the next render.
-  RenderRequest *request = &requests->request_list[requests->which];
-  viewer.core.camera_eye = request->eye.cast<float>();
-  viewer.core.camera_up = request->up.cast<float>();
+  ViewSetting *view_setting = &view_settings->view_setting_list[view_settings->which];
+  viewer.core.camera_eye = view_setting->eye.cast<float>();
+  viewer.core.camera_up = view_setting->up.cast<float>();
   return false;
 }
 
@@ -164,11 +164,11 @@ void SaveViewerSettings(const igl::viewer::Viewer &viewer,
   out.close();
 }
 
-// This callback will run until all requested views have been rendered.
+// This callback will run until all view_settinged views have been rendered.
 bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-                    RenderRequests *requests) {
+                    ViewSettings *view_settings) {
   // If no more views to render, make sure the Viewer class exits.
-  if (requests->which >= requests->request_list.size()) {
+  if (view_settings->which >= view_settings->view_setting_list.size()) {
     // This tells GLFW to close, the main render loop in Viewer will halt.
     glfwSetWindowShouldClose(viewer.window, true);
     // Push an empty event to make the Viewer class process another event.
@@ -187,17 +187,17 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
                                                                  window_height);
 
   // Draw the scene in the buffers.
-  RenderRequest *request = &requests->request_list[requests->which];
+  ViewSetting *view_setting = &view_settings->view_setting_list[view_settings->which];
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
-  std::string which_str = std::to_string(requests->which);
+  std::string which_str = std::to_string(view_settings->which);
   // Save it to a PNG.
   igl::png::writePNG(R, G, B, A,
                      output_directory + "/png/out" + which_str + ".png");
   // Save the camera settings.
   SaveViewerSettings(viewer,
                      output_directory + "/cfg/camera" + which_str + ".cfg");
-  ++requests->which;
+  ++view_settings->which;
 
   // Post an empty event so igl::viewer::Viewer will continue to pump events
   // and render the next view.
@@ -206,16 +206,16 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 }
 
 // Here, the viewer is launched and the views are rendered.
-void RunViewer(Mesh &mesh, RenderRequests &render_requests) {
+void RunViewer(Mesh &mesh, ViewSettings &view_settings) {
   // Plot the mesh.
   igl::viewer::Viewer viewer;                      // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces); // Set mesh data.
   viewer.core.show_lines = false;
   viewer.callback_init = ViewerInit;
   viewer.callback_pre_draw = std::bind(ViewerPreDraw, _1, &mesh,
-                                       &render_requests); // Bind callback.
+                                       &view_settings); // Bind callback.
   viewer.callback_post_draw = std::bind(ViewerPostDraw, _1, &mesh,
-                                        &render_requests); // Bind callback.
+                                        &view_settings); // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -274,9 +274,9 @@ int main(int argc, char *argv[]) {
   mesh.bounds.hi /= extent;
   mesh.bounds.lo /= extent;
 
-  // Setup a render requests.
-  RenderRequests render_requests;
-  GenerateRenderRequests(&mesh, sample_type, num_samples, &render_requests);
-  RunViewer(mesh, render_requests);
+  // Setup a render view_settings.
+  ViewSettings view_settings;
+  GenerateViewSettings(&mesh, sample_type, num_samples, &view_settings);
+  RunViewer(mesh, view_settings);
   return 0;
 }
