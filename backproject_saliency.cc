@@ -42,13 +42,23 @@ void ReadConfigValue<Eigen::Vector3d>(const std::string &input_field_value,
   stream >> field_value[0] >> sep >> field_value[1] >> sep >> field_value[2];
 }
 
+void SplitString(const std::string &input, const std::string delimiter,
+                 std::string &left, std::string &right) {
+  int position = input.find(delimiter);
+  left = input.substr(0, position);
+  right = input.substr(position + delimiter.length(),
+                       input.length() - delimiter.length() - position + 1);
+}
+
 template <typename ValueType>
 void ReadConfigLine(std::ifstream &ifs, const std::string &field_name,
                     ValueType &field_value) {
   std::string input_field_name, input_field_value;
-  ifs >> input_field_name >> input_field_value;
-  LOG(DEBUG) << "input_field_name = " << input_field_name;
-  LOG(DEBUG) << "field_name= " << field_name;
+  std::string line;
+  std::getline(ifs, line);
+  SplitString(line, " ", input_field_name, input_field_value);
+  LOG(DEBUG) << "input_field_name = " << input_field_name << "\n";
+  LOG(DEBUG) << "field_name= " << field_name << "\n";
   CHECK_TRUE(field_name == input_field_name);
   ReadConfigValue<ValueType>(input_field_value, field_value);
 }
@@ -81,9 +91,8 @@ void PrintCameraConfig(std::ostream &out, const ViewSetting &view_setting) {
 
 // Generate a batch of render view_settings.
 // Using the input mesh, there will be n view_settings generated.
-void GenerateViewSettings(const Mesh *mesh,
-                            const std::string &input_directory,
-                            ViewSettings *view_settings) {
+void GenerateViewSettings(const Mesh *mesh, const std::string &input_directory,
+                          ViewSettings *view_settings) {
   std::string camera_path = input_directory + "/camera0.cfg";
   std::string saliency_path = input_directory + "/saliency0.jpg";
   std::ifstream camera_file(camera_path);
@@ -91,6 +100,7 @@ void GenerateViewSettings(const Mesh *mesh,
 
   int i = 0;
   while (camera_file.good()) {
+    LOG(DEBUG) << "camera file = " << camera_path << "\n";
     ViewSetting view_setting;
     ReadCameraConfig(camera_file, &view_setting);
     PrintCameraConfig(std::cout, view_setting);
@@ -104,6 +114,7 @@ void GenerateViewSettings(const Mesh *mesh,
 
     camera_file.open(camera_path);
     saliency_file.open(saliency_path);
+    ++i;
   }
 }
 
@@ -121,7 +132,8 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
   if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   // If we have something to do, then setup the next render.
-  ViewSetting *view_setting = &view_settings->view_setting_list[view_settings->which];
+  ViewSetting *view_setting =
+      &view_settings->view_setting_list[view_settings->which];
   viewer.core.camera_eye = view_setting->eye.cast<float>();
   viewer.core.camera_up = view_setting->up.cast<float>();
   return false;
@@ -150,7 +162,8 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
                                                                  window_height);
 
   // Draw the scene in the buffers.
-  ViewSetting *view_setting = &view_settings->view_setting_list[view_settings->which];
+  ViewSetting *view_setting =
+      &view_settings->view_setting_list[view_settings->which];
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
   std::string which_str = std::to_string(view_settings->which);
@@ -165,14 +178,14 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 // Here, the viewer is launched and the views are rendered.
 void RunViewer(Mesh &mesh, ViewSettings &view_settings) {
   // Plot the mesh.
-  igl::viewer::Viewer viewer;                      // Create a viewer.
-  viewer.data.set_mesh(mesh.vertices, mesh.faces); // Set mesh data.
+  igl::viewer::Viewer viewer;                       // Create a viewer.
+  viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   viewer.core.show_lines = false;
   viewer.callback_init = ViewerInit;
   viewer.callback_pre_draw = std::bind(ViewerPreDraw, _1, &mesh,
-                                       &view_settings); // Bind callback.
+                                       &view_settings);  // Bind callback.
   viewer.callback_post_draw = std::bind(ViewerPostDraw, _1, &mesh,
-                                        &view_settings); // Bind callback.
+                                        &view_settings);  // Bind callback.
   viewer.launch(true, false);
 }
 
