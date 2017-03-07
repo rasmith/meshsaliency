@@ -1,9 +1,9 @@
 #Mesh Saliency
 
-#Names
-Hari Sridhar
-Randall 
-Soumyajit Gupta
+##Contributors
+  * Hari Sridhar
+  * Randall Smith
+  * Soumyajit Gupta
 
 ## Introduction
 Not much to say yet!
@@ -11,10 +11,12 @@ Not much to say yet!
 ## Dependencies
 
 ### Libraries
-* [libigl](https://github.com/libigl/)
+    * [libigl](https://github.com/libigl/)
     * [GLFW](http://www.glfw.org/)
     * [Eigen3](http://http://eigen.tuxfamily.org/)
     * [OpenGL](https://www.opengl.org/)
+    * [ISPC](https://ispc.github.io/)
+    * [TBB](https://www.threadingbuildingblocks.org/)
 
 ### Environment Variables
 
@@ -38,6 +40,8 @@ dependencies for OS X:
 ```
 brew install glfw
 brew install eigen
+brew install tbb
+brew install ispc
 ```
 
 Once GLFW and Eigen3 are installed, the following will build the main program:
@@ -45,8 +49,13 @@ Once GLFW and Eigen3 are installed, the following will build the main program:
 mkdir build
 cd build
 cmake ..
+make
 ```
-
+To build a specific executable
+```
+make <target-name>
+```
+will build the desired target binary.
 ### Linux
 
 ### Windows

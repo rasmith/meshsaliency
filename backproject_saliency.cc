@@ -8,6 +8,7 @@
 
 #define IGL_VIEWER_VIEWER_QUIET
 
+#include <igl/embree/EmbreeIntersector.h>
 #include <igl/look_at.h>
 #include <igl/png/writePNG.h>
 #include <igl/readOFF.h>
@@ -174,6 +175,10 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
   ViewSetting *view_setting =
       &view_settings->view_setting_list[view_settings->which];
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
+
+  // OK, find visible faces.
+  igl::embree::EmbreeIntersector intersector;
+  intersector.init(mesh->vertices.cast<float>(), mesh->faces, true);
 
   std::string which_str = std::to_string(view_settings->which);
   ++view_settings->which;
