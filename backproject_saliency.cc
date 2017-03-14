@@ -13,6 +13,7 @@
 #include <igl/look_at.h>
 #include <igl/png/writePNG.h>
 #include <igl/readOFF.h>
+#include <igl/read_triangle_mesh.h>
 #include <igl/viewer/Viewer.h>
 
 using geometry::BoundingBox;
@@ -29,7 +30,7 @@ std::string input_directory;
 
 template <typename ValueType>
 void ReadConfigValue(const std::string &input_field_value,
-		     ValueType &field_value) {
+                     ValueType &field_value) {
   std::stringstream stream;
   stream.str(input_field_value);
   stream >> field_value;
@@ -37,7 +38,7 @@ void ReadConfigValue(const std::string &input_field_value,
 
 template <>
 void ReadConfigValue<Eigen::Vector3d>(const std::string &input_field_value,
-				      Eigen::Vector3d &field_value) {
+                                      Eigen::Vector3d &field_value) {
   std::stringstream stream;
   stream.str(input_field_value);
   char sep = ',';
@@ -45,16 +46,16 @@ void ReadConfigValue<Eigen::Vector3d>(const std::string &input_field_value,
 }
 
 void SplitString(const std::string &input, const std::string delimiter,
-		 std::string &left, std::string &right) {
+                 std::string &left, std::string &right) {
   int position = input.find(delimiter);
   left = input.substr(0, position);
   right = input.substr(position + delimiter.length(),
-		       input.length() - delimiter.length() - position + 1);
+                       input.length() - delimiter.length() - position + 1);
 }
 
 template <typename ValueType>
 void ReadConfigLine(std::ifstream &ifs, const std::string &field_name,
-		    ValueType &field_value) {
+                    ValueType &field_value) {
   std::string input_field_name, input_field_value;
   std::string line;
   std::getline(ifs, line);
@@ -73,7 +74,7 @@ void ReadCameraConfig(std::ifstream &camera_file, ViewSetting *view_setting) {
   ReadConfigLine<double>(camera_file, "far", view_setting->far);
   ReadConfigLine<double>(camera_file, "view_angle", view_setting->view_angle);
   ReadConfigLine<Eigen::Vector3d>(camera_file, "camera_center",
-				  view_setting->camera_center);
+                                  view_setting->camera_center);
 }
 
 void PrintCameraConfig(std::ostream &out, const ViewSetting &view_setting) {
@@ -92,7 +93,7 @@ void PrintCameraConfig(std::ostream &out, const ViewSetting &view_setting) {
 // Generate a batch of render view_settings.
 // Using the input mesh, there will be n view_settings generated.
 void GenerateViewSettings(const Mesh *mesh, const std::string &input_directory,
-			  ViewSettings *view_settings) {
+                          ViewSettings *view_settings) {
   LOG(DEBUG) << "Loading the camera configurations...\n";
   std::string camera_path = input_directory + "/cfg/camera0.cfg";
   std::string saliency_path = input_directory + "/saliency/saliency0.jpg";
@@ -112,12 +113,12 @@ void GenerateViewSettings(const Mesh *mesh, const std::string &input_directory,
 
     camera_path = input_directory + "/cfg/camera" + std::to_string(i) + ".cfg";
     saliency_path =
-	input_directory + "/saliency/out" + std::to_string(i) + ".jpg";
+        input_directory + "/saliency/out" + std::to_string(i) + ".jpg";
 
     camera_file.open(camera_path);
     saliency_file.open(saliency_path);
     LOG(DEBUG) << "Camera '" << camera_path
-	       << "' has good = " << camera_file.good() << "\n";
+               << "' has good = " << camera_file.good() << "\n";
     ++i;
   }
   LOG(DEBUG) << "Loaded " << ++i << " camera, saliency pairs.\n";
@@ -137,7 +138,7 @@ bool ViewerInit(igl::viewer::Viewer &viewer, ViewSettings *view_settings) {
 
 // This is a pre render callback for the Viewr class.
 bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-		   ViewSettings *view_settings) {
+                   ViewSettings *view_settings) {
   if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   // If we have something to do, then setup the next render.
@@ -155,7 +156,7 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 
 // This callback will run until all view_settinged views have been rendered.
 bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-		    ViewSettings *view_settings) {
+                    ViewSettings *view_settings) {
   // If no more views to render, make sure the Viewer class exits.
   if (view_settings->which >= view_settings->view_setting_list.size()) {
     // This tells GLFW to close, the main render loop in Viewer will halt.
@@ -167,13 +168,13 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 
   // Allocate temporary buffers.
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(window_width,
-								 window_height);
+                                                                 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(window_width,
-								 window_height);
+                                                                 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(window_width,
-								 window_height);
+                                                                 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(window_width,
-								 window_height);
+                                                                 window_height);
 
   // Draw the scene in the buffers.
   ViewSetting *view_setting =
@@ -197,9 +198,9 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
       screen_xy = Eigen::Vector2f(x, y);
       // Fire a ray and see  if a face gets hit.
       hit = igl::embree::unproject_onto_mesh(
-	  screen_xy, mesh->faces, viewer.core.view * viewer.core.model,
-	  viewer.core.proj, viewer.core.viewport, intersector, face_id,
-	  barcycentric_coordinates);
+          screen_xy, mesh->faces, viewer.core.view * viewer.core.model,
+          viewer.core.proj, viewer.core.viewport, intersector, face_id,
+          barcycentric_coordinates);
       if (hit) hits.push_back(face_id);
     }
   }
@@ -217,14 +218,14 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 // Here, the viewer is launched and the views are rendered.
 void RunViewer(Mesh &mesh, ViewSettings &view_settings) {
   // Plot the mesh.
-  igl::viewer::Viewer viewer;			    // Create a viewer.
+  igl::viewer::Viewer viewer;                       // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   viewer.core.show_lines = false;
   viewer.callback_init = std::bind(ViewerInit, _1, &view_settings);
   viewer.callback_pre_draw = std::bind(ViewerPreDraw, _1, &mesh,
-				       &view_settings);  // Bind callback.
+                                       &view_settings);  // Bind callback.
   viewer.callback_post_draw = std::bind(ViewerPostDraw, _1, &mesh,
-					&view_settings);  // Bind callback.
+                                        &view_settings);  // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -253,7 +254,7 @@ int main(int argc, char *argv[]) {
 
   // Load a triangular mesh format.
   igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
-			  mesh.basename, mesh.extension, mesh.filename);
+                          mesh.basename, mesh.extension, mesh.filename);
 
   // Get the minimum and maximum extents.
   mesh.bounds.lo = mesh.vertices.colwise().minCoeff();
