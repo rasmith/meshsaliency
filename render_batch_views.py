@@ -6,7 +6,7 @@ from multiprocessing import Pool
 
 '''
  Usage: 
- ./render_views <input_directory> <output_directory> <sample_type>
+ ./render_batch_views <input_directory> <output_directory> <sample_type>
                 <num_samples> <width> <height>
   input_directory - root input path to the models to render [.OFF]
   output_directory - root output path directory for rendered views
@@ -23,7 +23,7 @@ from multiprocessing import Pool
  If a model file is at 
         <input_directory>/path/to/model.off, then the output
  will be placed in 
-        <output_directory>/path/to/model.off.
+        <output_directory>/path/to/png/out.png
  '''
 
 root_input_dir = os.path.abspath(sys.argv[1])
@@ -53,17 +53,17 @@ if __name__ == '__main__':
     worklist = []
     for dir_name, dir_list, file_list in os.walk(root_input_dir):
         dir_name=os.path.abspath(dir_name)
-#        print('Found dir: %s' % dir_name)
+        print('Found dir: %s' % dir_name)
         for file_name in file_list:
             name, extension = os.path.splitext(file_name)
-            if extension == '.off':
-#                print('\tname=%s ext=%s' % (name, extension))
+	    if extension in ['.off', '.obj', '.ply']:
+                print('\tname=%s ext=%s' % (name, extension))
                 input_path = dir_name + '/' + file_name
                 output_path=dir_name[len(root_input_dir)+1:]
                 full_output_path = root_output_dir + '/' + output_path
                 if not os.path.exists(full_output_path):
                     os.makedirs(full_output_path + '/png/')
                     os.makedirs(full_output_path + '/cfg')
-#                print('\toutput_path=%s/%s' % (root_output_dir, output_path))
+                print('\toutput_path=%s/%s' % (root_output_dir, output_path))
                 worklist.append((input_path, full_output_path, width, height))
     pool.map(render_views, worklist)

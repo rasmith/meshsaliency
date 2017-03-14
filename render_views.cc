@@ -1,4 +1,5 @@
 #include "geometry.h"
+#include "logger.h"
 #include "view_setting.h"
 
 #include <functional>
@@ -8,7 +9,7 @@
 
 #include <igl/look_at.h>
 #include <igl/png/writePNG.h>
-#include <igl/readOFF.h>
+#include <igl/read_triangle_mesh.h>
 #include <igl/viewer/Viewer.h>
 
 const double kPi = 3.14159265359;
@@ -17,33 +18,17 @@ const double kGoldenRatio = 1.61803398875;
 using geometry::BoundingBox;
 using geometry::Mesh;
 using std::placeholders::_1;
+using view_setting::RenderSampleType::kCylinderSample;
+using view_setting::RenderSampleType::kIcosahedronSample;
+using view_setting::RenderSampleType::kUniformRandomSample;
+using view_setting::RenderSampleType;
+using view_setting::ViewSetting;
+using view_setting::ViewSettings;
 
 int window_width = 256;
 int window_height = 256;
 
 std::string output_directory;
-
-// Each view will have a render view_setting associated with it.
-struct ViewSetting {
-  Eigen::Vector3d eye;
-  Eigen::Vector3d up;
-  Eigen::Vector3d right;
-  Eigen::Vector3d forward;
-};
-
-// Render view_settings are grouped into batches.
-struct ViewSettings {
-  std::vector<ViewSetting> view_setting_list;
-  int which;
-};
-
-// Sampling type for render views.
-enum RenderSampleType {
-  kUniformRandomSample,
-  kCylinderSample,
-  kIcosahedronSample,
-  kNumRenderSampleTypes
-};
 
 // Generate uniform randle samples.
 void GenerateUniformRandomSamples(int num_samples,
@@ -84,30 +69,29 @@ void GenerateIcosahedronSamples(std::vector<Eigen::Vector3d> *samples) {
       {-kGoldenRatio, 0.0, -1.0}, {-kGoldenRatio, 0.0, 1.0},
   };
   samples->clear();
-  for (int i = 0; i < 12; ++i)
-    samples->push_back(kIcosahedronVertices[i]);
+  for (int i = 0; i < 12; ++i) samples->push_back(kIcosahedronVertices[i]);
 }
 
 // Generate a batch of render view_settings.
 // Using the input mesh, there will be n view_settings generated.
 void GenerateViewSettings(const Mesh *mesh, RenderSampleType sample_type,
-                            int num_samples, ViewSettings *view_settings) {
+                          int num_samples, ViewSettings *view_settings) {
   // The radius to use.
-  double radius = 4.0;
+  double radius = 2;
 
   // Generate samples.
   std::vector<Eigen::Vector3d> samples;
   switch (sample_type) {
-  case kIcosahedronSample:
-    GenerateIcosahedronSamples(&samples);
-    break;
-  case kCylinderSample:
-    GenerateCylindricalSamples(num_samples, &samples);
-    break;
-  case kUniformRandomSample:
-  default:
-    GenerateUniformRandomSamples(num_samples, &samples);
-    break;
+    case kIcosahedronSample:
+      GenerateIcosahedronSamples(&samples);
+      break;
+    case kCylinderSample:
+      GenerateCylindricalSamples(num_samples, &samples);
+      break;
+    case kUniformRandomSample:
+    default:
+      GenerateUniformRandomSamples(num_samples, &samples);
+      break;
   }
 
   // Generate render views based on the choice of sampling.
@@ -117,12 +101,8 @@ void GenerateViewSettings(const Mesh *mesh, RenderSampleType sample_type,
   for (int i = 0; i < samples.size(); ++i) {
     // Get the eye location.
     view_setting.eye = radius * samples[i];
-    // Generate the forward direction.
-    view_setting.forward = view_setting.eye.normalized();
     // Generate the up direction
     view_setting.up = Eigen::Vector3d(0.0, 1.0, 0.0);
-    // Generate the right direction.
-    view_setting.right = view_setting.forward.cross(view_setting.up);
     view_settings->view_setting_list.push_back(view_setting);
   }
   view_settings->which = 0;
@@ -142,9 +122,11 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
   if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   // If we have something to do, then setup the next render.
-  ViewSetting *view_setting = &view_settings->view_setting_list[view_settings->which];
+  ViewSetting *view_setting =
+      &view_settings->view_setting_list[view_settings->which];
   viewer.core.camera_eye = view_setting->eye.cast<float>();
   viewer.core.camera_up = view_setting->up.cast<float>();
+  viewer.core.camera_dnear = 0.0001f;
   return false;
 }
 
@@ -187,16 +169,21 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
                                                                  window_height);
 
   // Draw the scene in the buffers.
-  ViewSetting *view_setting = &view_settings->view_setting_list[view_settings->which];
+  ViewSetting *view_setting =
+      &view_settings->view_setting_list[view_settings->which];
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
   std::string which_str = std::to_string(view_settings->which);
+  std::string png_file_path =
+      output_directory + "/png/out" + which_str + ".png";
+  LOG(DEBUG) << "Saving PNG file to :'" << png_file_path << "\n";
   // Save it to a PNG.
-  igl::png::writePNG(R, G, B, A,
-                     output_directory + "/png/out" + which_str + ".png");
+  igl::png::writePNG(R, G, B, A, png_file_path);
+  std::string cfg_file_path =
+      output_directory + "/cfg/out" + which_str + ".cfg";
+  LOG(DEBUG) << "Saving CFG file to :'" << cfg_file_path << "\n";
   // Save the camera settings.
-  SaveViewerSettings(viewer,
-                     output_directory + "/cfg/camera" + which_str + ".cfg");
+  SaveViewerSettings(viewer, cfg_file_path);
   ++view_settings->which;
 
   // Post an empty event so igl::viewer::Viewer will continue to pump events
@@ -208,14 +195,14 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 // Here, the viewer is launched and the views are rendered.
 void RunViewer(Mesh &mesh, ViewSettings &view_settings) {
   // Plot the mesh.
-  igl::viewer::Viewer viewer;                      // Create a viewer.
-  viewer.data.set_mesh(mesh.vertices, mesh.faces); // Set mesh data.
+  igl::viewer::Viewer viewer;                       // Create a viewer.
+  viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   viewer.core.show_lines = false;
   viewer.callback_init = ViewerInit;
   viewer.callback_pre_draw = std::bind(ViewerPreDraw, _1, &mesh,
-                                       &view_settings); // Bind callback.
+                                       &view_settings);  // Bind callback.
   viewer.callback_post_draw = std::bind(ViewerPostDraw, _1, &mesh,
-                                        &view_settings); // Bind callback.
+                                        &view_settings);  // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -238,9 +225,11 @@ int main(int argc, char *argv[]) {
 
   // Get the file path to load (supports .OFF right now).
   std::string model_path(argv[++argv_index]);
+  LOG(DEBUG) << "model_path =  " << model_path << "\n";
 
   // Get the output directory.
   output_directory = std::string(argv[++argv_index]);
+  LOG(DEBUG) << "output_directory=  " << output_directory << "\n";
 
   // Get the sample type.
   RenderSampleType sample_type =
@@ -255,9 +244,11 @@ int main(int argc, char *argv[]) {
 
   // Make a mesh struct.
   Mesh mesh;
+	mesh.path = model_path;
 
-  // Load a mesh in OFF format.
-  igl::readOFF(model_path, mesh.vertices, mesh.faces);
+  // Load a triangular mesh format.
+  igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
+			  mesh.basename, mesh.extension, mesh.filename);
 
   // Get the minimum and maximum extents.
   mesh.bounds.lo = mesh.vertices.colwise().minCoeff();

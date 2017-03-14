@@ -26,11 +26,11 @@ struct ViewSettings {
 
 // Sampling type for render views.
 enum RenderSampleType {
-  kUniformRandomSample,
+  kIcosahedronSample=0,
   kCylinderSample,
-  kIcosahedronSample,
+  kUniformRandomSample,
   kGatheredSample,
   kNumRenderSampleTypes
 };
 
-} // namespace view_setting
+}  // namespace view_setting
