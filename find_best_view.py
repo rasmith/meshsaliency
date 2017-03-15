@@ -20,6 +20,7 @@ import traceback
 sys.path.insert(0, "/usr/local/opt/libigl/python/")
 
 import pyigl as igl
+from iglhelpers import *
 
 vertex = """
 #version 330
@@ -152,8 +153,6 @@ class ShaderProgram(object):
 
 def key_callback(window, key, scancode, action, mods):
     """ Sample keyboard callback function """
-    print('Key: %s Action: %s pressed' % (key, action))
-
 
 if __name__ == "__main__":
     if not glfw.init():
@@ -176,6 +175,12 @@ if __name__ == "__main__":
     print("F.size=%d" % F.size())
     print("F.cols=%d" % F.cols())
     print("F.rows=%d" % F.rows())
+    vertices_np = e2p(V)
+    vertex_data_2 = vertices_np.flatten(np.float32)
+    print("vertices_np.shape = (%d, %d)" % vertices_np.shape)
+    indices_np = e2p(F)
+    color_data_2 = np.full(vertex_data_2.shape, 0.5)
+    print("indices_np.shape = (%d, %d" % indices_np.shape)
 
 
     # These Window hints are used to specify
