@@ -179,6 +179,7 @@ if __name__ == "__main__":
     vertex_data_2 = vertices_np.flatten(np.float32)
     print("vertices_np.shape = (%d, %d)" % vertices_np.shape)
     indices_np = e2p(F)
+    indices_data_2 = indices_np.flatten(np.float32)
     color_data_2 = np.full(vertex_data_2.shape, 0.5)
     print("indices_np.shape = (%d, %d" % indices_np.shape)
 
@@ -229,14 +230,14 @@ if __name__ == "__main__":
 
     # Lets create our Vertex Buffer objects - these are the buffers
     # that will contain our per vertex data
-    vbo_id = glGenBuffers(2)
+    vbo_id = glGenBuffers(3)
 
     # Bind a buffer before we can use it
     glBindBuffer(GL_ARRAY_BUFFER, vbo_id[0])
 
     # Now go ahead and fill this bound buffer with some data
     glBufferData(GL_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(
-        vertex_data), vertex_data, GL_STATIC_DRAW)
+        vertex_data_2), vertex_data_2, GL_STATIC_DRAW)
 
     # Now specify how the shader program will be receiving this data
     # In this case the data from this buffer will be available in the shader
@@ -250,10 +251,15 @@ if __name__ == "__main__":
     # Now do the same for the other vertex buffer
     glBindBuffer(GL_ARRAY_BUFFER, vbo_id[1])
     glBufferData(GL_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(
-        color_data), color_data, GL_STATIC_DRAW)
+        color_data_2), color_data_2, GL_STATIC_DRAW)
     glVertexAttribPointer(program.attribute_location(
         'vin_color'), 3, GL_FLOAT, GL_FALSE, 0, None)
     glEnableVertexAttribArray(1)
+
+    # Now do the same for the other vertex buffer
+     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_id[2]);
+     glBufferData(GL_ELEMENT_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(
+         indices_data_2), indices_data_2, GL_STATIC_DRAW));
 
     # Lets unbind our vbo and vao state
     # We will bind these again in the draw loop
