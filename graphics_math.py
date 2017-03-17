@@ -7,8 +7,8 @@ def perspective(fovy, aspect, near, far):
   matrix[0,0]= f / aspect
   matrix[1,1] = f
   matrix[2,2] = (near + far) / d
-  matrix[3,2] = 2.0 * near * far / d
-  matrix[2,3] = -1.0
+  matrix[2,3] = 2.0 * near * far / d
+  matrix[3,2] = -1.0
   return matrix
 
 def lookat(eye, at, up):

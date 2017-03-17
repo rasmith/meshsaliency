@@ -1,167 +1,50 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import glfw
-import numpy as np
-from OpenGL.arrays import ArrayDatatype
-from OpenGL.GL import (GL_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER,
-    GL_COLOR_BUFFER_BIT, GL_COMPILE_STATUS, GL_FALSE, GL_UNSIGNED_INT,
-    GL_FLOAT, GL_FRAGMENT_SHADER, GL_LINK_STATUS, GL_RENDERER,
-    GL_SHADING_LANGUAGE_VERSION,
-    GL_STATIC_DRAW, GL_TRIANGLES, GL_TRUE, GL_VENDOR, GL_VERSION,
-    GL_VERTEX_SHADER, glAttachShader, glBindBuffer, glBindVertexArray,
-    glBufferData, glClear, glClearColor, glCompileShader,
-    glCreateProgram, glCreateShader, glDeleteProgram,
-    glDeleteShader, glDrawArrays, glEnableVertexAttribArray,
-    glGenBuffers, glGenVertexArrays, glGetAttribLocation,
-    glGetProgramInfoLog, glGetProgramiv, glGetShaderInfoLog,
-    glGetShaderiv, glGetString, glGetUniformLocation, glLinkProgram,
-    glShaderSource, glUseProgram, glVertexAttribPointer, glDrawElements,
-    glUniformMatrix4fv)
-import sys
 import os
+import sys
 import traceback
 import graphics_math as gm
-
-sys.path.insert(0, "/usr/local/opt/libigl/python/")
-
+import numpy as np
 import pyigl as igl
+from OpenGL.GL import *
+from OpenGL.arrays import ArrayDatatype
 from iglhelpers import *
+from shader_program import *
 
 vertex = """
 #version 330
-in vec3 vin_position;
-in vec3 vin_color;
+in vec3 vertex_position;
 uniform mat4 model;
 uniform mat4 projection;
 uniform mat4 view;
-out vec3 vout_color;
 
 void main(void)
 {
     mat4 mvp = projection * view * model;
-    vout_color = vin_color;
-    gl_Position = mvp * vec4(vin_position, 1.0);
+    gl_Position = mvp * vec4(vertex_position, 1.0);
 }
 """
 
-
 fragment = """
 #version 330
-in vec3 vout_color;
 out vec4 fout_color;
 
 void main(void)
 {
-    fout_color = vec4(vout_color, 1.0);
+    fout_color = vec4(1.0, 0.0, 0.0, 1.0);
 }
 """
 
-vertex_data = np.array([0.75, 0.75, 0.0,
-  0.75, -0.75, 0.0,
-  -0.75, -0.75, 0.0], dtype=np.float32)
-
-color_data = np.array([1, 0, 0,
-  0, 1, 0,
-  0, 0, 1], dtype=np.float32)
-
-
-class ShaderProgram(object):
-  """ Helper class for using GLSL shader programs
-    """
-
-  def __init__(self, vertex, fragment):
-    """
-      Parameters
-      ----------
-      vertex : str
-          String containing shader source code for the vertex
-          shader
-      fragment : str
-          String containing shader source code for the fragment
-          shader
-
-      """
-    self.program_id = glCreateProgram()
-    vs_id = self.add_shader(vertex, GL_VERTEX_SHADER)
-    frag_id = self.add_shader(fragment, GL_FRAGMENT_SHADER)
-
-    glAttachShader(self.program_id, vs_id)
-    glAttachShader(self.program_id, frag_id)
-    glLinkProgram(self.program_id)
-
-    if glGetProgramiv(self.program_id, GL_LINK_STATUS) != GL_TRUE:
-      info = glGetProgramInfoLog(self.program_id)
-      glDeleteShader(vs_id)
-      glDeleteShader(frag_id)
-      raise RuntimeError('Error linking program: %s' % (info))
-
-    glDeleteShader(vs_id)
-    glDeleteShader(frag_id)
-
-  def add_shader(self, source, shader_type):
-    """ Helper function for compiling a GLSL shader
-
-      Parameters
-      ----------
-      source : str
-          String containing shader source code
-
-      shader_type : valid OpenGL shader type
-          Type of shader to compile
-
-      Returns
-      -------
-      value : int
-          Identifier for shader if compilation is successful
-
-    """
-    try:
-      shader_id = glCreateShader(shader_type)
-      glShaderSource(shader_id, source)
-      glCompileShader(shader_id)
-      if glGetShaderiv(shader_id, GL_COMPILE_STATUS) != GL_TRUE:
-        info = glGetShaderInfoLog(shader_id)
-        raise RuntimeError('Shader compilation failed: %s' % (info))
-      return shader_id
-    except:
-      glDeleteShader(shader_id)
-      raise
-
-  def uniform_location(self, name):
-    """ Helper function to get location of an OpenGL uniform variable
-
-      Parameters
-      ----------
-      name : str
-          Name of the variable for which location is to be returned
-
-      Returns
-      -------
-      value : int
-          Integer describing location
-
-    """
-    return glGetUniformLocation(self.program_id, name)
-
-  def attribute_location(self, name):
-    """ Helper function to get location of an OpenGL attribute variable
-
-      Parameters
-      ----------
-      name : str
-          Name of the variable for which location is to be returned
-
-      Returns
-      -------
-      value : int
-          Integer describing location
-
-    """
-    return glGetAttribLocation(self.program_id, name)
-
+def check_gl_error(window): 
+  error = glGetError()
+  if not (error == GL_NO_ERROR): 
+    print("OpenGL Error: code = %d" % error)
+    glfw.terminate();
+    sys.exit(-1)
 
 def key_callback(window, key, scancode, action, mods):
-  """ Sample keyboard callback function """
-
+  if key == glfw.KEY_ESCAPE  and action == glfw.PRESS:
+    glfw.set_window_should_close(window, True)
 
 if __name__ == "__main__":
   if not glfw.init():
@@ -170,40 +53,37 @@ if __name__ == "__main__":
 
   mesh_path = sys.argv[1]
   print("mesh_path = %s\n" % mesh_path)
-  V = igl.eigen.MatrixXd()
-  F = igl.eigen.MatrixXi()
+  vertices = igl.eigen.MatrixXd()
+  faces  = igl.eigen.MatrixXi()
 
   try:
-    if not igl.read_triangle_mesh(mesh_path, V, F):
+    if not igl.read_triangle_mesh(mesh_path, vertices, faces):
       print("failed to read mesh\n")
-  except:  # catch *all* exceptions
+  except:
     traceback.print_exc(file=sys.stdout)
     sys.exit(-1)
 
-  print("V.size=%d" % V.size())
-  print("V.cols=%d" % V.cols())
-  print("V.rows=%d" % V.rows())
-  print("F.size=%d" % F.size())
-  print("F.cols=%d" % F.cols())
-  print("F.rows=%d" % F.rows())
-  vertices_np = e2p(V)
-  vertex_data_2 = vertices_np.flatten(np.float32)
-  print("vertices_np.shape = (%d, %d)" % vertices_np.shape)
-  indices_np = e2p(F)
-  indices_data_2 = indices_np.flatten(np.float32)
-  color_data_2 = np.full(vertex_data_2.shape, 0.5)
-  print("indices_np.shape = (%d, %d" % indices_np.shape)
+  vertex_data = e2p(vertices).flatten('C').astype(dtype=np.float32, order='C')
+  print("vertex_data.dtype = ", vertex_data.dtype)
+  index_data = e2p(faces).flatten('C').astype(dtype=np.int32, order = 'C')
+  print("index_data.dtype = ", index_data.dtype)
+  print("vertices =\n")
+  for i in range(10):
+    print("%d : (%f, %f, %f)" % 
+        (i, vertex_data[3*i], vertex_data[3*i+1], vertex_data[3*i+2]))
+  print("indices =\n")
+  for i in range(10):
+    print("%d : (%d, %d, %d)" % 
+        (i, index_data[3*i], index_data[3*i+1], index_data[3*i+2]))
 
-  # These Window hints are used to specify
-  # which opengl version to use and other details
-  # for the opengl context that will be created
+  # Setup window hints: set the GLSL version and profile.
   glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
-  glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 2)
+  glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
   glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
   glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, GL_TRUE)
 
-  window_width = 640
-  window_height = 480
+  window_width = 800
+  window_height = 600
   window = glfw.create_window(window_width, window_height, "Hello World", 
       None, None)
   if not window:
@@ -213,87 +93,87 @@ if __name__ == "__main__":
 
   glfw.make_context_current(window)
 
-  # Every time a key on the keyboard is clicked
-  # call our callback function
+  # Setup the key callback.
   glfw.set_key_callback(window, key_callback)
   glfw.swap_interval(1)
 
-  glfw.set_window_title(window, "Modern opengl example")
+  glfw.set_window_title(window, "Modern OpenGL")
 
-  # If everything went well the following calls
-  # will display the version of opengl being used
+  # Print out some environment information.
   print('Vendor: %s' % (glGetString(GL_VENDOR)))
   print('Opengl version: %s' % (glGetString(GL_VERSION)))
   print('GLSL Version: %s' % (glGetString(GL_SHADING_LANGUAGE_VERSION)))
   print('Renderer: %s' % (glGetString(GL_RENDERER)))
 
-  glClearColor(0.95, 1.0, 0.95, 0)
-
-  # Lets compile our shaders since the use of shaders is now
-  # mandatory. We need at least a vertex and fragment shader
-  # begore we can draw anything
+  # Compile shaders and link program.
   program = ShaderProgram(fragment=fragment, vertex=vertex)
 
-  # Lets create a VAO and bind it
-  # Think of VAO's as object that encapsulate buffer state
-  # Using a VAO enables you to cut down on calls in your draw
-  # loop which generally makes things run faster
+  # Generate VAOs.
   vao_id = glGenVertexArrays(1)
   glBindVertexArray(vao_id)
 
-  # Lets create our Vertex Buffer objects - these are the buffers
-  # that will contain our per vertex data
-  vbo_id = glGenBuffers(3)
+  # Generate VBOs.
+  vbo_id = glGenBuffers(2)
 
-  # Bind a buffer before we can use it
+  # Setup the vertex data in VBO.
+  vertex_location = program.attribute_location('vertex_position')
+  print("location = ", vertex_location)
   glBindBuffer(GL_ARRAY_BUFFER, vbo_id[0])
-
-  # Now go ahead and fill this bound buffer with some data
   glBufferData(GL_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(
-    vertex_data_2), vertex_data_2, GL_STATIC_DRAW)
+    vertex_data), vertex_data, GL_STATIC_DRAW)
+  glVertexAttribPointer(vertex_location, 3, GL_FLOAT, GL_FALSE, 0, None)
+  glEnableVertexAttribArray(vertex_location)
 
-  # Now specify how the shader program will be receiving this data
-  # In this case the data from this buffer will be available in the shader
-  # as the vin_position vertex attribute
-  glVertexAttribPointer(program.attribute_location(
-    'vin_position'), 3, GL_FLOAT, GL_FALSE, 0, None)
-
-  # Turn on this vertex attribute in the shader
-  glEnableVertexAttribArray(0)
-
-  # Now do the same for the other vertex buffer
-  glBindBuffer(GL_ARRAY_BUFFER, vbo_id[1])
-  glBufferData(GL_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(
-    color_data_2), color_data_2, GL_STATIC_DRAW)
-  glVertexAttribPointer(program.attribute_location(
-    'vin_color'), 3, GL_FLOAT, GL_FALSE, 0, None)
-  glEnableVertexAttribArray(1)
-
-  # Now do the same for the other vertex buffer
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_id[2])
+  # Setup the indices data VBO.
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_id[1])
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(
-    indices_data_2), indices_data_2, GL_STATIC_DRAW)
+    index_data), index_data, GL_STATIC_DRAW)
 
   model_location = program.uniform_location('model')
   view_location = program.uniform_location('view')
   projection_location = program.uniform_location('projection')
 
-  eye = np.transpose([[0.0, 0.0, 1.0, 0.0]])
-  at = np.zeros((4, 1))
-  up= np.transpose([[0.0, 1.0, 0.0, 0.0]])
-  near = 0.001
+  eye = np.transpose([[0.0, 0.1, 0.4, 1.0]])
+  at = np.transpose([[0.0, 0.1, 0.0, 1.0]])
+  up= np.transpose([[0.0, 1.0, 0.0, 1.0]])
+  fov = 45.0
+  near = 0.0001
   far = 1000
-  aspect = float(window_width) / float(window_height)
 
-  model_matrix = np.asfortranarray(np.eye(4))
-  view_matrix = np.asfortranarray(gm.lookat(eye, at, up))
-  projection_matrix = np.asfortranarray(
-      gm.perspective(45.0, aspect, near, far))
-  
+  model_matrix = np.eye(4).astype(dtype=np.float32, order='F')
+
+  once = True
+
+  num_faces = len(index_data) / 3
+
   # Render until told to close the window.
   while not glfw.window_should_close(window):
-    # Clear screen.
-    glClear(GL_COLOR_BUFFER_BIT)
+    # Get current screen width/height.
+    framebuffer_width, framebuffer_height = glfw.get_framebuffer_size(window)
+
+    glViewport(0, 0, framebuffer_width, framebuffer_height)
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glEnable(GL_DEPTH_TEST);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDepthFunc(GL_LESS);
+
+    aspect = float(framebuffer_width) / float(framebuffer_height)
+
+    projection_matrix = gm.perspective(fov, aspect, near, far).astype(
+        dtype=np.float32, order='F')
+    view_matrix = gm.lookat(eye, at, up).astype(dtype=np.float32, order='F')
+
+    if once:
+      np.set_printoptions(precision=6, suppress=True)
+      print("width = %d, height = %d\n" %
+          (framebuffer_width, framebuffer_height))
+      print("fov = %f, aspect = %f, near = %f, far = %f\n" %
+          (fov, aspect, near, far))
+      print("model =\n %s\n" % str(model_matrix))
+      print("view =\n %s\n" % str(view_matrix))
+      print("projection =\n %s\n" % str(projection_matrix))
+      print("#faces = %d" % num_faces)
+      once = False
 
     # Specify program to be used
     glUseProgram(program.program_id)
@@ -305,10 +185,10 @@ if __name__ == "__main__":
     glBindVertexArray(vao_id)
 
     # Draw the triangles.
-    glDrawElements(GL_TRIANGLES, int(
-      len(indices_data_2) / 3), GL_UNSIGNED_INT, 0)
+    glDrawElements(GL_TRIANGLES,  int(num_faces * 3), GL_UNSIGNED_INT, None)
 
     # Poll for window events.
     glfw.poll_events()
+
     # Swap buffers.
     glfw.swap_buffers(window)
