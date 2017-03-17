@@ -14,24 +14,46 @@ from shader_program import *
 vertex = """
 #version 330
 in vec3 vertex_position;
+in vec3 vertex_normal;
+uniform vec3 light_position;
 uniform mat4 model;
 uniform mat4 projection;
 uniform mat4 view;
+out vec4 normal;
+out vec4 light_direction;
+out vec4 eye_direction;
+out vec4 reflect_direction;
 
 void main(void)
 {
-    mat4 mvp = projection*view*model;
+    mat4 model_view  = view * model;
+    mat4 normal_matrix = transpose(inverse(model_view));
+    mat4 mvp = projection*model_view;
     gl_Position = mvp * vec4(vertex_position, 1.0);
+    normal =  normalize(normal_matrix * vec4(vertex_normal, 0.0));
+    light_direction = vec4(normalize(light_position - vertex_position), 0.0);
+    eye_direction = -gl_Position;
+    reflect_direction = reflect(light_direction, normal);
 }
 """
 
 fragment = """
 #version 330
+in vec4 normal;
+in vec4 light_direction;
+in vec4 reflect_direction;
+in vec4 eye_direction;
 out vec4 fragment_color;
 
 void main(void)
 {
-    fragment_color = vec4(1.0, 0.0, 0.0, 1.0);
+    vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
+    float dot_nl = dot(normalize(light_direction), normalize(normal));
+    dot_nl = clamp(dot_nl, 0.0, 1.0);
+    float dot_rv = dot(normalize(eye_direction), normalize(reflect_direction));
+    dot_rv = clamp(dot_rv, 0.0, 1.0);
+    float pow_rv = ceil(dot_nl) * clamp(pow(dot_rv, 5.0), 0.0, 1.0);
+    fragment_color = clamp(0.5 * (dot_nl + pow_rv) * color, 0.0, 1.0);
 }
 """
 
@@ -74,10 +96,20 @@ if __name__ == "__main__":
         traceback.print_exc(file=sys.stdout)
         sys.exit(-1)
 
+    face_normals = igl.eigen.MatrixXd()
+    igl.per_face_normals(vertices, faces, face_normals)
+    vertex_normals = igl.eigen.MatrixXd()
+    igl.per_vertex_normals(vertices, faces,
+        igl.PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA, vertex_normals)
+
     vertex_data = e2p(vertices).flatten(
         'C').astype(dtype=np.float32, order='C')
     index_data = e2p(faces).flatten(
         'C').astype(dtype=np.uint32, order='C')
+    face_normal_data = e2p(face_normals).flatten(
+        'C').astype(dtype=np.float32, order='C')
+    vertex_normal_data = e2p(vertex_normals).flatten(
+        'C').astype(dtype=np.float32, order='C')
     num_faces = len(index_data) / 3
     num_vertices = len(vertex_data) / 3
     print("#vertices = %d and #faces = %d" %
@@ -143,7 +175,7 @@ if __name__ == "__main__":
     glBindVertexArray(vao_id)
 
     # Generate VBOs.
-    vbo_id = glGenBuffers(2)
+    vbo_id = glGenBuffers(3)
 
     # Setup the vertex data in VBO.
     vertex_location = program.attribute_location('vertex_position')
@@ -157,18 +189,32 @@ if __name__ == "__main__":
                           GL_FLOAT, GL_FALSE, 0, None)
     glEnableVertexAttribArray(vertex_location)
 
+    # Setup the normal data in VBO.
+    vertex_normal_location = program.attribute_location('vertex_normal')
+    vertex_normal_byte_count = ArrayDatatype.arrayByteCount(vertex_normal_data)
+    print("normal_location = ", vertex_normal_location)
+    print("normal_byte_count = ", vertex_normal_byte_count)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_id[1])
+    glBufferData(GL_ARRAY_BUFFER, vertex_normal_byte_count,
+                 vertex_normal_data, GL_STATIC_DRAW)
+    glVertexAttribPointer(vertex_normal_location, 3,
+                          GL_FLOAT, GL_FALSE, 0, None)
+    glEnableVertexAttribArray(vertex_normal_location)
+
     # Setup the indices data VBO.
     index_byte_count = ArrayDatatype.arrayByteCount(index_data)
     print("index_byte_count = ", index_byte_count)
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_id[1])
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_id[2])
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,  index_byte_count, index_data,
                  GL_STATIC_DRAW)
 
     model_location = program.uniform_location('model')
     view_location = program.uniform_location('view')
     projection_location = program.uniform_location('projection')
-    print("matrix locations = (%d, %d, %d)"
-          % (model_location, view_location, projection_location))
+    light_position_location = program.uniform_location('light_position')
+    print("matrix locations = (%d, %d, %d, %d)"
+          % (model_location, view_location, projection_location,
+            light_position_location))
 
     eye = np.transpose([[0.0, 0.1, 0.4, 1.0]])
     at = np.transpose([[0.0, 0.1, 0.0, 1.0]])
@@ -197,6 +243,7 @@ if __name__ == "__main__":
 
         projection_matrix = gm.perspective(fov, aspect, near, far)
         view_matrix = gm.lookat(eye, at, up)
+        light_position = np.array([0.0, 10.0, 10.0])
 
 
         # Specify program to be used
@@ -210,8 +257,10 @@ if __name__ == "__main__":
         projection_matrix_py = projection_matrix.transpose().flatten().tolist()
         glUniformMatrix4fv(projection_location, 1, GL_FALSE,
                            (GLfloat * 16)(*projection_matrix_py))
+        light_position_py = light_position.tolist()
+        glUniform3fv(light_position_location, 1,
+            (GLfloat * 3)(*light_position_py))
 
-        
         if once:
             np.set_printoptions(precision=6, suppress=True)
             print("width = %d, height = %d\n" %
