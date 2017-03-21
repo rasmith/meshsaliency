@@ -82,6 +82,12 @@ def key_callback(window, key, scancode, action, mods):
 def error_callback(error, description):
     print("GFLW Error: %d:%s " % (error, description))
 
+# def get_model()
+    # model = ml_net_model(img_cols=shape_c, img_rows=shape_r, 
+        # downsampling_factor_product=10)
+    # sgd = SGD(lr=1e-3, decay=0.0005, momentum=0.9, nesterov=True)
+    # print("Compile ML-Net Model")
+    # model.compile(sgd, loss)
 
 if __name__ == "__main__":
     mesh_path = sys.argv[1]
@@ -110,6 +116,7 @@ if __name__ == "__main__":
         'C').astype(dtype=np.float32, order='C')
     vertex_normal_data = e2p(vertex_normals).flatten(
         'C').astype(dtype=np.float32, order='C')
+
     num_faces = len(index_data) / 3
     num_vertices = len(vertex_data) / 3
     print("#vertices = %d and #faces = %d" %
@@ -126,6 +133,21 @@ if __name__ == "__main__":
         ib = index_data[3 * i + 1]
         ic = index_data[3 * i + 2]
         print("%d : (%f, %f, %f)" % (i, ia, ib, ic))
+    center = np.mean(
+        np.reshape(vertex_data, (int(num_vertices), 3)), axis=0) 
+    max_vals = np.max(
+        np.reshape(vertex_data, (int(num_vertices), 3)), axis=0) 
+    min_vals = np.min(
+        np.reshape(vertex_data, (int(num_vertices), 3)), axis=0) 
+    extents = max_vals - min_vals
+
+    print("center = %s" % str(center))
+    print("max = %s" % str(max_vals))
+    print("min = %s" % str(min_vals))
+
+    vertex_data = np.reshape(vertex_data, (int(num_vertices), 3))
+    vertex_data = (vertex_data - center) / extents
+    vertex_data = np.reshape(vertex_data, 3 * int(num_vertices))
 
     if not glfw.init():
         print('GLFW initialization failed')
@@ -216,12 +238,14 @@ if __name__ == "__main__":
           % (model_location, view_location, projection_location,
             light_position_location))
 
-    eye = np.transpose([[0.0, 0.1, 0.4, 1.0]])
-    at = np.transpose([[0.0, 0.1, 0.0, 1.0]])
+    diagonal = max_vals - min_vals
+
+    eye = np.transpose([[0.0, 0.0, 2.0, 1.0]])
+    at = np.transpose([[0.0, 0.0, 0.0, 1.0]])
     up = np.transpose([[0.0, 1.0, 0.0, 1.0]])
     fov = 45.0
     near = 0.0001
-    far = 1000
+    far =  100
 
     model_matrix = np.eye(4)
 
@@ -243,7 +267,7 @@ if __name__ == "__main__":
 
         projection_matrix = gm.perspective(fov, aspect, near, far)
         view_matrix = gm.lookat(eye, at, up)
-        light_position = np.array([0.0, 10.0, 10.0])
+        light_position = np.array([0.0, 5.0, 1.0])
 
 
         # Specify program to be used
