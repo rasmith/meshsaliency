@@ -38,13 +38,15 @@ class GlfwView(object):
 
 
 class GlfwController(object):
-    def __init__(self, width, height, title, view, model):
+    def __init__(self, width, height, xpos, ypos, title, view, model):
         self.title = title
         self.height = height
         self.width = width
         self.view = view
         self.model = model
         self.initialized = False
+        self.xpos = xpos
+        self.ypos = ypos
 
     def open(self):
         self.view.set_hints()
@@ -56,6 +58,7 @@ class GlfwController(object):
             glfw.terminate()
             sys.exit(-1)
         glfw.make_context_current(self.window)
+        glfw.set_window_pos(self.window, self.xpos, self.ypos)
         glfw.set_key_callback(self.window,
                               lambda window, key, scancode, action, mods:
                               self.key_callback(key, scancode, action, mods))
@@ -76,6 +79,9 @@ class GlfwController(object):
             self.view.set_model(self.model)
             self.view.initialize()
         self.initialized = True
+
+    def close(self):
+        glfw.destroy_window(self.window)
 
     def render_and_update(self):
         if glfw.window_should_close(self.window):
@@ -99,6 +105,7 @@ class GlfwController(object):
         glfw.swap_buffers(self.window)
         return False
 
+
     def run(self):
         glfw.make_context_current(self.window)
 
@@ -106,6 +113,8 @@ class GlfwController(object):
 
         while not self.render_and_update():
             pass
+
+        self.close()
 
 
 class GlfwMultiController(object):
@@ -124,12 +133,17 @@ class GlfwMultiController(object):
         while running:
             running = False
             for info in self.controllers:
+                controller = info['controller']
                 if not info['opened']:
-                    info['controller'].open()
+                    controller.open()
                     info['opened'] = True
                 if not info['initialized']:
-                    info['controller'].initialize()
+                    controller.initialize()
                     info['initialized'] = True
                 if not info['closed']:
                     running = True
-                    info['closed'] = info['controller'].render_and_update()
+                    should_close = controller.render_and_update()
+                    if should_close:
+                        controller.close()
+                        info['closed'] = True
+

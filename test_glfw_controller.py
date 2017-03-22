@@ -15,7 +15,7 @@ mesh_vertex_shader = "mesh_vertex.glsl"
 model = MeshModel(mesh_path)
 view = MeshView(mesh_fragment_shader, mesh_vertex_shader)
 
-mesh_controller = GlfwController(800, 600, "Mesh View", view, model)
+mesh_controller = GlfwController(400, 300, 100, 100, "Mesh View", view, model)
 multi_controller.add(mesh_controller)
 
 image_fragment_shader = "image_fragment.glsl"
@@ -24,7 +24,7 @@ image_vertex_shader = "image_vertex.glsl"
 model = ImageModel()
 view = ImageView(image_fragment_shader, image_vertex_shader)
 
-image_controller = GlfwController(800, 600, "Image View", view, model)
+image_controller = GlfwController(400, 300, 500, 100, "Image View", view, model)
 multi_controller.add(image_controller)
 
 multi_controller.run()
