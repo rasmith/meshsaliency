@@ -98,6 +98,8 @@ class MeshView(GlfwView):
         # Compile shaders and link program.
         self.program = ShaderProgram(
             fragment=self.fragment, vertex=self.vertex)
+        
+        glUseProgram(self.program.program_id)
 
         fragment_color_location = glGetFragDataLocation(
             self.program.program_id, "fragment_color")
