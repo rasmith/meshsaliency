@@ -105,7 +105,6 @@ class GlfwController(object):
         glfw.swap_buffers(self.window)
         return False
 
-
     def run(self):
         glfw.make_context_current(self.window)
 
@@ -123,8 +122,8 @@ class GlfwMultiController(object):
 
     def add(self, controller):
         self.controllers.append(
-            {'controller': controller, 
-             'initialized' : False,
+            {'controller': controller,
+             'initialized': False,
              'opened': False,
              'closed': False})
 
@@ -146,4 +145,3 @@ class GlfwMultiController(object):
                     if should_close:
                         controller.close()
                         info['closed'] = True
-
