@@ -60,6 +60,9 @@ class ImageView(GlfwView):
         glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, GL_TRUE)
 
     def initialize(self):
+        # generate textures
+        self.texture_id = glGenTextures(1)
+
         # Load shaders.
         self.fragment = open(self.fragment_shader_path, 'r').read()
         self.vertex = open(self.vertex_shader_path, 'r').read()
@@ -95,6 +98,9 @@ class ImageView(GlfwView):
                               GL_FLOAT, GL_FALSE, 0, None)
         glEnableVertexAttribArray(self.texture_location)
 
+        self.texture_sampler_location = self.program.uniform_location(
+            'texture_sampler')
+
         self.update_vbos()
 
 
@@ -114,4 +120,4 @@ class ImageView(GlfwView):
         glBindVertexArray(self.vao_id)
 
         # Draw the triangles.
-        glDrawElements(GL_TRIANGLE_FAN, 1, GL_UNSIGNED_INT, None)
+        glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, None)

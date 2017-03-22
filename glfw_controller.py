@@ -44,6 +44,7 @@ class GlfwController(object):
         self.width = width
         self.view = view
         self.model = model
+        self.initialized = False
 
     def open(self):
         self.view.set_hints()
@@ -65,31 +66,70 @@ class GlfwController(object):
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
             glfw.set_window_should_close(self.window, True)
 
-    def run(self):
-        glfw.make_context_current(self.window)
-
+    def initialize(self):
+        if self.initialized:
+            return
         if self.model is not None:
             self.model.initialize()
 
         if self.view is not None and self.model is not None:
             self.view.set_model(self.model)
             self.view.initialize()
+        self.initialized = True
 
-           # Render until told to close the window.
-        while not glfw.window_should_close(self.window):
-            # Switch to the current context.
-            glfw.make_context_current(self.window)
+    def render_and_update(self):
+        if glfw.window_should_close(self.window):
+            return True
 
-            # Get current screen width/height.
-            framebuffer_width, framebuffer_height = glfw.get_framebuffer_size(
-                self.window)
-            glViewport(0, 0, framebuffer_width, framebuffer_height)
+        # Switch to the current context.
+        glfw.make_context_current(self.window)
 
-            if self.view is not None:
-                self.view.render(framebuffer_width, framebuffer_height)
+        # Get current screen width/height.
+        framebuffer_width, framebuffer_height = glfw.get_framebuffer_size(
+            self.window)
+        glViewport(0, 0, framebuffer_width, framebuffer_height)
 
-            # Poll for window events.
-            glfw.poll_events()
+        if self.view is not None:
+            self.view.render(framebuffer_width, framebuffer_height)
 
-            # Swap buffers.
-            glfw.swap_buffers(self.window)
+        # Poll for window events.
+        glfw.poll_events()
+
+        # Swap buffers.
+        glfw.swap_buffers(self.window)
+        return False
+
+    def run(self):
+        glfw.make_context_current(self.window)
+
+        self.initialize()
+
+        while not self.render_and_update():
+            pass
+
+
+class GlfwMultiController(object):
+    def __init__(self):
+        self.controllers = []
+
+    def add(self, controller):
+        self.controllers.append(
+            {'controller': controller, 
+             'initialized' : False,
+             'opened': False,
+             'closed': False})
+
+    def run(self):
+        running = True
+        while running:
+            running = False
+            for info in self.controllers:
+                if not info['opened']:
+                    info['controller'].open()
+                    info['opened'] = True
+                if not info['initialized']:
+                    info['controller'].initialize()
+                    info['initialized'] = True
+                if not info['closed']:
+                    running = True
+                    info['closed'] = info['controller'].render_and_update()
