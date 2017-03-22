@@ -21,7 +21,7 @@ class MeshModel(GlfwModel):
 
         try:
             if not igl.read_triangle_mesh(self.mesh_path, self.vertices,
-                self.faces):
+                                          self.faces):
                 print("failed to read mesh\n")
         except:
             traceback.print_exc(file=sys.stdout)
@@ -79,8 +79,8 @@ class MeshView(GlfwView):
         glBufferData(GL_ARRAY_BUFFER, self.model.vertex_normal_byte_count,
                      self.model.vertex_normal_data, GL_STATIC_DRAW)
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.vbo_id[2])
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,  self.model.index_byte_count, 
-            self.model.index_data, GL_STATIC_DRAW)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,  self.model.index_byte_count,
+                     self.model.index_data, GL_STATIC_DRAW)
 
     def set_hints(self):
         glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
@@ -175,4 +175,5 @@ class MeshView(GlfwView):
         glBindVertexArray(self.vao_id)
 
         # Draw the triangles.
-        glDrawElements(GL_TRIANGLES, self.model.num_faces * 3, GL_UNSIGNED_INT, None)
+        glDrawElements(GL_TRIANGLES, self.model.num_faces *
+                       3, GL_UNSIGNED_INT, None)

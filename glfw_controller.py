@@ -2,6 +2,7 @@ import glfw
 import sys
 from OpenGL.GL import *
 
+
 class GlfwApp(object):
     def __init__(self):
         self.initialized = False
@@ -19,9 +20,11 @@ class GlfwApp(object):
         def error_callback(self, error, description):
             print("GFLW Error: %d:%s " % (error, description))
 
+
 class GlfwModel(object):
     def __init__(self):
         return
+
 
 class GlfwView(object):
     def __init__(self):
@@ -32,7 +35,8 @@ class GlfwView(object):
 
     def render(self, width, height):
         return
-    
+
+
 class GlfwController(object):
     def __init__(self, width, height, title, view, model):
         self.title = title
@@ -40,7 +44,7 @@ class GlfwController(object):
         self.width = width
         self.view = view
         self.model = model
-    
+
     def open(self):
         self.view.set_hints()
 
