@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 import numpy as np
 import graphics_math as gm
-
 
 eye=np.transpose(np.array([[1.0, 1.0, 1.0, 1.0]]))
 at=np.zeros((4, 1))
@@ -8,7 +8,6 @@ up=np.zeros((4, 1))
 up[1,0]=1.0
 
 V=gm.lookat(eye,at,up)
-
 
 np.set_printoptions(precision=3)
 print("V=%s" % str(V))

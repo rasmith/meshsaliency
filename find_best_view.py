@@ -47,7 +47,7 @@ out vec4 fragment_color;
 
 void main(void)
 {
-    vec4 color = vec4(0.5, 0.5, 0.5, 1.0);
+    vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
     float dot_nl = dot(normalize(light_direction), normalize(normal));
     dot_nl = clamp(dot_nl, 0.0, 1.0);
     float dot_rv = dot(normalize(eye_direction), normalize(reflect_direction));
@@ -56,7 +56,6 @@ void main(void)
     fragment_color = clamp(0.5 * (dot_nl + pow_rv) * color, 0.0, 1.0);
 }
 """
-
 
 def check_matrix_uniform(name, program, location):
     check = (GLfloat * 16)()
