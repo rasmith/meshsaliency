@@ -2,8 +2,13 @@ import glfw
 import sys
 from OpenGL.GL import *
 
-
 class GlfwApp(object):
+    _instance = None
+    def __new__(cls):
+        if GlfwApp._instance is None:
+            GlfwApp._instance = object.__new__(cls)
+        return GlfwApp._instance
+
     def __init__(self):
         self.initialized = False
 
@@ -17,8 +22,8 @@ class GlfwApp(object):
                                 self.error_callback(error, description))
         self.initialized = True
 
-        def error_callback(self, error, description):
-            print("GFLW Error: %d:%s " % (error, description))
+    def error_callback(self, error, description):
+           print("GFLW Error: %d:%s " % (error, description))
 
 
 class GlfwModel(object):
