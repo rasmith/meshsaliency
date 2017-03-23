@@ -9,14 +9,15 @@ from OpenGL.arrays import ArrayDatatype
 from iglhelpers import *
 from shader_program import *
 from glfw_controller import *
-
+from skimage import io
 
 class ImageModel(GlfwModel):
-    def __init__(self):
-        return
+    def __init__(self, image_path):
+        self.image_path = image_path
 
     def initialize(self):
-        return
+        self.image = io.imread(self.image_path)
+        self.image_byte_count = ArrayDatatype.arrayByteCount(self.image)
 
 class ImageView(GlfwView):
     def __init__(self, fragment_shader_path, vertex_shader_path):
@@ -40,6 +41,7 @@ class ImageView(GlfwView):
           0.0, 0.0
           ]).astype(dtype=np.float32, order='C')
         self.texture_byte_count = ArrayDatatype.arrayByteCount(self.texture_data)
+        self.image_loaded = False
 
     def update_vbos(self):
         glBindVertexArray(self.vao_id)
@@ -60,9 +62,6 @@ class ImageView(GlfwView):
         glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, GL_TRUE)
 
     def initialize(self):
-        # generate textures
-        self.texture_id = glGenTextures(1)
-
         # Load shaders.
         self.fragment = open(self.fragment_shader_path, 'r').read()
         self.vertex = open(self.vertex_shader_path, 'r').read()
@@ -83,6 +82,17 @@ class ImageView(GlfwView):
         # Generate VBOs.
         self.vbo_id = glGenBuffers(3)
 
+        # Generate texture.
+        self.texture_id = glGenTextures(1)
+
+        # Generate sampler.
+        self.sampler_id = glGenSamplers(1)
+        glSamplerParameteri(self.sampler_id, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glSamplerParameteri(self.sampler_id, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        glSamplerParameteri(self.sampler_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glSamplerParameteri(self.sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+
+
         # Setup the vertex data in VBO.
         self.vertex_location = self.program.attribute_location(
             'vertex_position')
@@ -97,6 +107,7 @@ class ImageView(GlfwView):
         glVertexAttribPointer(self.texture_location, 2,
                               GL_FLOAT, GL_FALSE, 0, None)
         glEnableVertexAttribArray(self.texture_location)
+
 
         self.texture_sampler_location = self.program.uniform_location(
             'texture_sampler')
@@ -115,6 +126,25 @@ class ImageView(GlfwView):
 
         # Specify program to be used
         glUseProgram(self.program.program_id)
+
+        # Activate texture unit.
+        glActiveTexture(GL_TEXTURE0);
+
+        # Bind to texture.
+        glBindTexture(GL_TEXTURE_2D, self.texture_id)
+
+        image_width, image_height, image_channels = self.model.image.shape
+        if not self.image_loaded:
+            glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB8, image_width, image_height)
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, image_width, image_height,
+                            GL_RGB, GL_UNSIGNED_BYTE, self.model.image)
+            self.image_loaded = True
+
+        # Set sampler unit.
+        glUniform1i(self.texture_sampler_location, 0);
+
+        # Bind to sampler.
+        glBindSampler(0, self.sampler_id)
 
         # Bind to VAO.
         glBindVertexArray(self.vao_id)

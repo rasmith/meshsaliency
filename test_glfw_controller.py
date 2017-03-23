@@ -21,7 +21,8 @@ multi_controller.add(mesh_controller)
 image_fragment_shader = "image_fragment.glsl"
 image_vertex_shader = "image_vertex.glsl"
 
-model = ImageModel()
+image_path = "checkerboard.jpg"
+model = ImageModel(image_path)
 view = ImageView(image_fragment_shader, image_vertex_shader)
 
 image_controller = GlfwController(400, 300, 500, 100, "Image View", view, model)
