@@ -24,21 +24,21 @@ class ImageView(GlfwView):
         self.fragment_shader_path = fragment_shader_path
         self.vertex_shader_path = vertex_shader_path
         self.vertex_data = np.array([
-          -1.0, -1.0, 0.0, 1.0,
-          1.0, -1.0, 0.0, 1.0,
-          1.0, 1.0, 0.0, 1.0,
-          -1.0, 1.0, 0.0, 1.0
+          -1.0, -1.0, 0.0,
+          1.0, -1.0, 0.0,
+          1.0, 1.0, 0.0,
+          -1.0, 1.0, 0.0
           ]).astype(dtype=np.float32, order='C')
         self.vertex_byte_count = ArrayDatatype.arrayByteCount(self.vertex_data)
         self.index_data = np.array([
-          0, 1, 2, 3
+          0, 1, 2, 0, 2, 3
           ]).astype(dtype=np.uint32, order='C')
         self.index_byte_count = ArrayDatatype.arrayByteCount(self.index_data)
         self.texture_data = np.array([
           0.0, 0.0,
           1.0, 0.0, 
-          1.0, 0.0,
-          0.0, 0.0
+          1.0, 1.0,
+          0.0, 1.0
           ]).astype(dtype=np.float32, order='C')
         self.texture_byte_count = ArrayDatatype.arrayByteCount(self.texture_data)
         self.image_loaded = False
@@ -97,17 +97,16 @@ class ImageView(GlfwView):
         self.vertex_location = self.program.attribute_location(
             'vertex_position')
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo_id[0])
-        glVertexAttribPointer(self.vertex_location, 4,
+        glVertexAttribPointer(self.vertex_location, 3,
                               GL_FLOAT, GL_FALSE, 0, None)
         glEnableVertexAttribArray(self.vertex_location)
         # Setup the texture data in VBO.
-        glBindBuffer(GL_ARRAY_BUFFER, self.vbo_id[1])
         self.texture_location = self.program.attribute_location(
             'texture_coordinate')
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo_id[1])
         glVertexAttribPointer(self.texture_location, 2,
                               GL_FLOAT, GL_FALSE, 0, None)
         glEnableVertexAttribArray(self.texture_location)
-
 
         self.texture_sampler_location = self.program.uniform_location(
             'texture_sampler')
@@ -119,6 +118,10 @@ class ImageView(GlfwView):
         glViewport(0, 0, width, height)
         glClearColor(0.0, 0.0, 0.0, 0.0)
         glEnable(GL_DEPTH_TEST)
+        glEnable(GL_BLEND)
+        glEnable(GL_CULL_FACE)
+        glCullFace(GL_BACK)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glDepthFunc(GL_LESS)
 
@@ -150,4 +153,4 @@ class ImageView(GlfwView):
         glBindVertexArray(self.vao_id)
 
         # Draw the triangles.
-        glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, None)
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, None)
