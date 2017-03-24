@@ -28,19 +28,18 @@ class GlfwApp(object):
 
 class GlfwModel(object):
     def __init__(self):
-        return
+        pass
 
 
 class GlfwView(object):
     def __init__(self):
-        return
+        pass
 
     def set_model(self, model):
         self.model = model
 
     def render(self, width, height):
-        return
-
+        pass
 
 class GlfwController(object):
     def __init__(self, width, height, xpos, ypos, title, view, model):
@@ -85,6 +84,12 @@ class GlfwController(object):
             self.view.initialize()
         self.initialized = True
 
+    def pre_render(self):
+        pass
+
+    def post_render(self):
+        pass
+
     def close(self):
         glfw.destroy_window(self.window)
 
@@ -100,14 +105,22 @@ class GlfwController(object):
             self.window)
         glViewport(0, 0, framebuffer_width, framebuffer_height)
 
+        self.current_width = framebuffer_width
+        self.current_height = framebuffer_height
+
+        self.pre_render()
+
         if self.view is not None:
             self.view.render(framebuffer_width, framebuffer_height)
+
+        self.post_render()
 
         # Poll for window events.
         glfw.poll_events()
 
         # Swap buffers.
         glfw.swap_buffers(self.window)
+
         return False
 
     def run(self):
@@ -119,7 +132,6 @@ class GlfwController(object):
             pass
 
         self.close()
-
 
 class GlfwMultiController(object):
     def __init__(self):

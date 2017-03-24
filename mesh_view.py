@@ -34,41 +34,47 @@ class MeshModel(GlfwModel):
                                igl.PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA,
                                self.vertex_normals)
 
-        self.vertex_data = e2p(self.vertices).flatten(
-            'C').astype(dtype=np.float32, order='C')
-        self.index_data = e2p(self.faces).flatten(
-            'C').astype(dtype=np.uint32, order='C')
-        self.face_normal_data = e2p(self.face_normals).flatten(
-            'C').astype(dtype=np.float32, order='C')
-        self.vertex_normal_data = e2p(self.vertex_normals).flatten(
-            'C').astype(dtype=np.float32, order='C')
+        self.vertex_data = e2p(self.vertices).astype(
+            dtype=np.float32, order='C')
+        self.index_data = e2p(self.faces).astype(dtype=np.uint32, order='C')
+        self.face_normal_data = e2p(self.face_normals).astype(
+            dtype=np.float32, order='C')
+        self.vertex_normal_data = e2p(self.vertex_normals).astype(
+            dtype=np.float32, order='C')
 
-        self.num_faces = int(len(self.index_data) / 3)
-        self.num_vertices = int(len(self.vertex_data) / 3)
-        self.center = np.mean(
-            np.reshape(self.vertex_data, (self.num_vertices, 3)), axis=0)
-        self.max_vals = np.max(
-            np.reshape(self.vertex_data, (self.num_vertices, 3)), axis=0)
-        self.min_vals = np.min(
-            np.reshape(self.vertex_data, (self.num_vertices, 3)), axis=0)
+        self.num_faces = self.index_data.shape[0]
+        self.num_vertices = self.vertex_data.shape[0]
+        self.center = np.mean(self.vertex_data, axis=0)
+        self.max_vals = np.max(self.vertex_data, axis=0)
+        self.min_vals = np.min(self.vertex_data, axis=0)
         self.extents = self.max_vals - self.min_vals
 
-        self.vertex_data = np.reshape(self.vertex_data, (self.num_vertices, 3))
-        self.vertex_data = (self.vertex_data - self.center) / self.extents
-        self.vertex_data = np.reshape(self.vertex_data, 3 * self.num_vertices)
+        print("min = %s, max = %s, extents = %s" % (self.min_vals, self.max_vals,
+                                                    self.extents))
+
+        self.vertex_data = (self.vertex_data -  self.center)/ self.extents
 
         self.vertex_byte_count = ArrayDatatype.arrayByteCount(self.vertex_data)
-
         self.vertex_normal_byte_count = ArrayDatatype.arrayByteCount(
             self.vertex_normal_data)
         self.index_byte_count = ArrayDatatype.arrayByteCount(self.index_data)
-        self.diagonal = self.max_vals - self.min_vals
 
 
 class MeshView(GlfwView):
     def __init__(self, fragment_shader_path, vertex_shader_path):
         self.fragment_shader_path = fragment_shader_path
         self.vertex_shader_path = vertex_shader_path
+
+    def set_camera(self, eye, at, up, fov, near, far):
+        self.eye = np.transpose([eye])
+        self.at = np.transpose([at])
+        self.up = np.transpose([up])
+        self.fov = fov
+        self.near = near
+        self.far = far
+
+    def set_light_position(self, position):
+        self.light_position = np.array(position)
 
     def update_vbos(self):
         glBindVertexArray(self.vao_id)
@@ -98,7 +104,7 @@ class MeshView(GlfwView):
         # Compile shaders and link program.
         self.program = ShaderProgram(
             fragment=self.fragment, vertex=self.vertex)
-        
+
         glUseProgram(self.program.program_id)
 
         fragment_color_location = glGetFragDataLocation(
@@ -136,12 +142,6 @@ class MeshView(GlfwView):
 
         self.update_vbos()
 
-        self.eye = np.transpose([[0.0, 0.0, 2.0, 1.0]])
-        self.at = np.transpose([[0.0, 0.0, 0.0, 1.0]])
-        self.up = np.transpose([[0.0, 1.0, 0.0, 1.0]])
-        self.fov = 45.0
-        self.near = 0.0001
-        self.far = 100
 
     def render(self, width, height):
         glViewport(0, 0, width, height)
@@ -156,7 +156,6 @@ class MeshView(GlfwView):
             self.fov, aspect, self.near, self.far)
         model_matrix = np.eye(4)
         view_matrix = gm.lookat(self.eye, self.at, self.up)
-        light_position = np.array([0.0, 5.0, 1.0])
 
         # Specify program to be used
         glUseProgram(self.program.program_id)
@@ -169,7 +168,7 @@ class MeshView(GlfwView):
         projection_matrix_py = projection_matrix.transpose().flatten().tolist()
         glUniformMatrix4fv(self.projection_location, 1, GL_FALSE,
                            (GLfloat * 16)(*projection_matrix_py))
-        light_position_py = light_position.tolist()
+        light_position_py = self.light_position.tolist()
         glUniform3fv(self.light_position_location, 1,
                      (GLfloat * 3)(*light_position_py))
 

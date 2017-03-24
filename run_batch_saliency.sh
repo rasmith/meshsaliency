@@ -22,7 +22,7 @@
 # the weights file 'vgg16_weights.h5' should be in <SCRIPT_PATH_DIR>.
 #
 
-PYTHON_PATH="/usr/local/bin/python"
+PYTHON_PATH="/usr/local/bin/python3"
 SCRIPT_PATH_DIR="/Users/randallsmith/Documents/github/mlnet"
 SCRIPT_PATH="${SCRIPT_PATH_DIR}/main.py"
 
