@@ -28,101 +28,6 @@ int window_height = 256;
 
 std::string input_directory;
 
-template <typename ValueType>
-void ReadConfigValue(const std::string &input_field_value,
-                     ValueType &field_value) {
-  std::stringstream stream;
-  stream.str(input_field_value);
-  stream >> field_value;
-}
-
-template <>
-void ReadConfigValue<Eigen::Vector3d>(const std::string &input_field_value,
-                                      Eigen::Vector3d &field_value) {
-  std::stringstream stream;
-  stream.str(input_field_value);
-  char sep = ',';
-  stream >> field_value[0] >> sep >> field_value[1] >> sep >> field_value[2];
-}
-
-void SplitString(const std::string &input, const std::string delimiter,
-                 std::string &left, std::string &right) {
-  int position = input.find(delimiter);
-  left = input.substr(0, position);
-  right = input.substr(position + delimiter.length(),
-                       input.length() - delimiter.length() - position + 1);
-}
-
-template <typename ValueType>
-void ReadConfigLine(std::ifstream &ifs, const std::string &field_name,
-                    ValueType &field_value) {
-  std::string input_field_name, input_field_value;
-  std::string line;
-  std::getline(ifs, line);
-  SplitString(line, " ", input_field_name, input_field_value);
-  CHECK_TRUE(field_name == input_field_name);
-  ReadConfigValue<ValueType>(input_field_value, field_value);
-}
-
-void ReadCameraConfig(std::ifstream &camera_file, ViewSetting *view_setting) {
-  ReadConfigLine<int>(camera_file, "width", view_setting->width);
-  ReadConfigLine<int>(camera_file, "height", view_setting->height);
-  ReadConfigLine<Eigen::Vector3d>(camera_file, "eye", view_setting->eye);
-  ReadConfigLine<Eigen::Vector3d>(camera_file, "up", view_setting->up);
-  ReadConfigLine<bool>(camera_file, "orthographic", view_setting->orthographic);
-  ReadConfigLine<double>(camera_file, "near", view_setting->near);
-  ReadConfigLine<double>(camera_file, "far", view_setting->far);
-  ReadConfigLine<double>(camera_file, "view_angle", view_setting->view_angle);
-  ReadConfigLine<Eigen::Vector3d>(camera_file, "camera_center",
-                                  view_setting->camera_center);
-}
-
-void PrintCameraConfig(std::ostream &out, const ViewSetting &view_setting) {
-  Eigen::IOFormat format(Eigen::FullPrecision, 0, ",", ",");
-  out << "width " << view_setting.width << "\n";
-  out << "height " << view_setting.height << "\n";
-  out << "eye  " << view_setting.eye.format(format) << "\n";
-  out << "up " << view_setting.up.format(format) << "\n";
-  out << "orthographic " << view_setting.orthographic << "\n";
-  out << "near " << view_setting.near << "\n";
-  out << "far " << view_setting.far << "\n";
-  out << "view_angle " << view_setting.view_angle << "\n";
-  out << "camera_center " << view_setting.camera_center.format(format) << "\n";
-}
-
-// Generate a batch of render view_settings.
-// Using the input mesh, there will be n view_settings generated.
-void GenerateViewSettings(const Mesh *mesh, const std::string &input_directory,
-                          ViewSettings *view_settings) {
-  LOG(DEBUG) << "Loading the camera configurations...\n";
-  std::string camera_path = input_directory + "/cfg/camera0.cfg";
-  std::string saliency_path = input_directory + "/saliency/saliency0.jpg";
-  std::ifstream camera_file(camera_path);
-  std::ifstream saliency_file(saliency_path);
-
-  int i = 0;
-  while (camera_file.good()) {
-    LOG(DEBUG) << "camera file = " << camera_path << "\n";
-    ViewSetting view_setting;
-    ReadCameraConfig(camera_file, &view_setting);
-    PrintCameraConfig(std::cout, view_setting);
-    view_settings->view_setting_list.push_back(view_setting);
-
-    camera_file.close();
-    saliency_file.close();
-
-    camera_path = input_directory + "/cfg/camera" + std::to_string(i) + ".cfg";
-    saliency_path =
-        input_directory + "/saliency/out" + std::to_string(i) + ".jpg";
-
-    camera_file.open(camera_path);
-    saliency_file.open(saliency_path);
-    LOG(DEBUG) << "Camera '" << camera_path
-               << "' has good = " << camera_file.good() << "\n";
-    ++i;
-  }
-  LOG(DEBUG) << "Loaded " << ++i << " camera, saliency pairs.\n";
-}
 
 // This is the Viewer initialization callback.
 bool ViewerInit(igl::viewer::Viewer &viewer, ViewSettings *view_settings) {
@@ -138,18 +43,16 @@ bool ViewerInit(igl::viewer::Viewer &viewer, ViewSettings *view_settings) {
 
 // This is a pre render callback for the Viewr class.
 bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-                   ViewSettings *view_settings) {
+                   const ViewSetting& view_settings) {
   if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   // If we have something to do, then setup the next render.
-  ViewSetting *view_setting =
-      &view_settings->view_setting_list[view_settings->which];
-  viewer.core.camera_eye = view_setting->eye.cast<float>();
-  viewer.core.camera_up = view_setting->up.cast<float>();
-  viewer.core.orthographic = view_setting->orthographic;
-  viewer.core.camera_dnear = view_setting->near;
-  viewer.core.camera_dfar = view_setting->far;
-  viewer.core.camera_view_angle = view_setting->view_angle;
+  viewer.core.camera_eye = view_setting.eye.cast<float>();
+  viewer.core.camera_up = view_setting.up.cast<float>();
+  viewer.core.orthographic = view_setting.orthographic;
+  viewer.core.camera_dnear = view_setting.near;
+  viewer.core.camera_dfar = view_setting.far;
+  viewer.core.camera_view_angle = view_setting.view_angle;
   viewer.core.camera_center = view_setting->camera_center.cast<float>();
   return false;
 }

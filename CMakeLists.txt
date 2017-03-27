@@ -61,3 +61,11 @@ target_link_libraries(backproject_saliency ${LIBIGL_LIBRARIES}
                           ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
                           ${LIBIGL_PNG_EXTRA_LIBRARIES}
                           ${LIBIGL_EMBREE_EXTRA_LIBRARIES})
+
+# Compile and link spectral_saliency executable.
+add_executable(spectral_saliency spectral_saliency.cc)
+target_link_libraries(spectral_saliency ${LIBIGL_LIBRARIES}
+                          ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
+                          ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
+                          ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
+                          ${LIBIGL_PNG_EXTRA_LIBRARIES})

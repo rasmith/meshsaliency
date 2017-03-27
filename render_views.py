@@ -11,7 +11,8 @@ from PIL import *
 
 
 class SphericalCameraGenerator(object):
-    def __init__(self, radius_min, radius_max, radius_n_steps, theta_min, theta_max, theta_n_steps, phi_min, phi_max, phi_n_steps):
+    def __init__(self, radius_min, radius_max, radius_n_steps, theta_min,
+                theta_max, theta_n_steps, phi_min, phi_max, phi_n_steps):
         self.radius_min = radius_min
         self.radius_max = radius_max
         self.radius_n_steps = radius_n_steps
