@@ -28,6 +28,11 @@ option(LIBIGL_WITH_OPENGL_GLFW "Use GLFW"           ON)
 option(LIBIGL_WITH_PNG         "Use PNG"            ON)
 option(LIBIGL_WITH_EMBREE      "Use Embree"         ON)
 
+#setup Point Cloud Library (pcl)
+find_package(PCL 1.3 REQUIRED)
+include_directories(${PCL_INCLUDE_DIRS})
+add_definitions(${PCL_DEFINITIONS})
+
 # Compile the options we need. 
 add_subdirectory("${LIBIGL_INCLUDE_DIR}/../shared/cmake" "libigl")
 message(STATUS "LIBIGL_INCLUDE_DIRS=${LIBIGL_INCLUDE_DIRS}")
@@ -61,11 +66,12 @@ target_link_libraries(backproject_saliency ${LIBIGL_LIBRARIES}
                           ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
                           ${LIBIGL_PNG_EXTRA_LIBRARIES}
                           ${LIBIGL_EMBREE_EXTRA_LIBRARIES})
-
 # Compile and link spectral_saliency executable.
 add_executable(spectral_saliency spectral_saliency.cc)
 target_link_libraries(spectral_saliency ${LIBIGL_LIBRARIES}
                           ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
                           ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
                           ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
-                          ${LIBIGL_PNG_EXTRA_LIBRARIES})
+                          ${LIBIGL_PNG_EXTRA_LIBRARIES}
+                          ${PCL_LIBRARIES})
+

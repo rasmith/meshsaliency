@@ -14,6 +14,8 @@
 #include <igl/readOFF.h>
 #include <igl/read_triangle_mesh.h>
 #include <igl/viewer/Viewer.h>
+#include <pcl/filters/convolution_3d.h>
+#include <pcl/point_types.h>
 
 using geometry::BoundingBox;
 using geometry::Mesh;
@@ -26,6 +28,33 @@ int window_width = 256;
 int window_height = 256;
 
 std::string input_directory;
+
+typedef pcl::PointXYZ PclPoint;
+typedef pcl::filters::GaussianKernel<PclPoint, PclPoint> PclGaussianKernel;
+typedef pcl::search::KdTree<PclPoint> PclKdtree;
+typedef pcl::PointCloud<PclPoint> PclPointCloud;
+
+void ComputeMeshGaussian(const Mesh &mesh,
+                                                const float *scales,
+                                                int num_scales, Mesh *output) {
+  // Compute Gaussian filter.  Use PCL for this, since libigl sucks.
+  PclPointCloud::Ptr input_cloud(new PclPointCloud());
+  PclPointCloud::Ptr output_cloud(new PclPointCloud());
+  // Search tree for this.  Really don't have to code.
+  PclKdtree::Ptr tree(new PclKdtree());
+  // Setup the kernel.
+  PclGaussianKernel::Ptr kernel(new PclGaussianKernel());
+  // Setup the convolution.
+  pcl::filters::Convolution3D<PclPoint, PclPoint, PclGaussianKernel> convolution;
+  // OK set the input cloud and search surface.
+  kernel->setInputCloud(input_cloud);
+  convolution.setKernel(*kernel);
+  convolution.setSearchMethod(tree);
+  for (int i = 0; i < num_scales; ++i) {
+    convolution.setRadiusSearch(scales[i]);
+    convolution.convolve(*output_cloud);
+  }
+}
 
 // Outputs:
 //   U  #U by dim list of output vertex posistions (can be same ref as V)
@@ -92,11 +121,14 @@ void RunViewer(Mesh &mesh, const ViewSetting *view_setting) {
   igl::viewer::Viewer viewer;                       // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   viewer.core.show_lines = false;
-  viewer.callback_init = std::bind(ViewerInit, _1, view_setting);
-  viewer.callback_pre_draw = std::bind(ViewerPreDraw, _1, &mesh,
-                                       view_setting);  // Bind callback.
-  viewer.callback_post_draw = std::bind(ViewerPostDraw, _1, &mesh,
-                                        view_setting);  // Bind callback.
+  viewer.callback_init =
+      std::bind(ViewerInit, std::placeholders::_1, view_setting);
+  viewer.callback_pre_draw =
+      std::bind(ViewerPreDraw, std::placeholders::_1, &mesh,
+                view_setting);  // Bind callback.
+  viewer.callback_post_draw =
+      std::bind(ViewerPostDraw, std::placeholders::_1, &mesh,
+                view_setting);  // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -117,7 +149,7 @@ int main(int argc, char *argv[]) {
   igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
                           mesh.basename, mesh.extension, mesh.filename);
 
-  ComputeSaliency(mesh, 0.5);
+  ComputeSaliency(mesh, 1.0);
 
   // Get the minimum and maximum extents.
   mesh.bounds.lo = mesh.vertices.colwise().minCoeff();
