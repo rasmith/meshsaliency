@@ -7,6 +7,7 @@ namespace view_setting {
 
 // Each view will have a render view_setting associated with it.
 struct ViewSetting {
+  ViewSetting() {}
   ViewSetting(int screen_width, int screen_height,
               const Eigen::Vector3d& eye_position,
               const Eigen::Vector3d& up_vector, bool is_orthographic,
