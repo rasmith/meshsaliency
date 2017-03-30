@@ -65,6 +65,16 @@ void ComputeMeshGaussian(const Mesh &mesh, const double *scales, int num_scales,
   }
 }
 
+void ComputeModifiedMeshGaussian(const Mesh &mesh, const double *scales,
+                                 int num_scales, Mesh **output) {
+  // Compute Gaussian filter.  Use PCL for this, since libigl sucks.
+  PclPointCloud::Ptr input_cloud(new PclPointCloud());
+  PclPointCloud::Ptr output_cloud(new PclPointCloud());
+  // Search tree for this.  Really don't have to code.
+  PclKdtree::Ptr tree(new PclKdtree());
+  // TODO: Compute the gaussian of each vertex based on its 1-ring neighbors.
+}
+
 // Outputs:
 //   U  #U by dim list of output vertex posistions (can be same ref as V)
 //   G  #G by 3 list of output face indices into U (can be same ref as G)
@@ -79,9 +89,15 @@ void ComputeSaliency(const Mesh &mesh, double downsample_factor, double *scales,
   igl::qslim(mesh.vertices, mesh.faces,
              ceil(downsample_factor * mesh.faces.rows()), output_vertices,
              output_faces, birth_faces, birth_vertices);
-  std::vector<Mesh *> smoothed_meshes(num_scales);
-  for (int i = 0; i < num_scales; ++i) smoothed_meshes[i] = new Mesh;
-  ComputeMeshGaussian(mesh, scales, num_scales, &smoothed_meshes[0]);
+  std::vector<Mesh *> gaussian_smoothed_meshes(num_scales);
+  std::vector<Mesh *> modified_gaussian_smoothed_meshes(num_scales);
+  for (int i = 0; i < num_scales; ++i) {
+    gaussian_smoothed_meshes[i] = new Mesh;
+    modified_gaussian_smoothed_meshes[i] = new Mesh;
+  }
+  ComputeMeshGaussian(mesh, scales, num_scales, &gaussian_smoothed_meshes[0]);
+  ComputeModifiedMeshGaussian(mesh, scales, num_scales,
+                              &modified_gaussian_smoothed_meshes[0]);
 }
 
 // This is the Viewer initialization callback.
