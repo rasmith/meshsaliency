@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 #define IGL_VIEWER_VIEWER_QUIET
 
@@ -34,9 +35,12 @@ typedef pcl::filters::GaussianKernel<PclPoint, PclPoint> PclGaussianKernel;
 typedef pcl::search::KdTree<PclPoint> PclKdtree;
 typedef pcl::PointCloud<PclPoint> PclPointCloud;
 
-void ComputeMeshGaussian(const Mesh &mesh,
-                                                const float *scales,
-                                                int num_scales, Mesh *output) {
+Eigen::Vector3d PclPointToEigen(const PclPoint &point) {
+  return Eigen::Vector3d(point.x, point.y, point.z);
+}
+
+void ComputeMeshGaussian(const Mesh &mesh, const double *scales, int num_scales,
+                         Mesh **output) {
   // Compute Gaussian filter.  Use PCL for this, since libigl sucks.
   PclPointCloud::Ptr input_cloud(new PclPointCloud());
   PclPointCloud::Ptr output_cloud(new PclPointCloud());
@@ -45,14 +49,19 @@ void ComputeMeshGaussian(const Mesh &mesh,
   // Setup the kernel.
   PclGaussianKernel::Ptr kernel(new PclGaussianKernel());
   // Setup the convolution.
-  pcl::filters::Convolution3D<PclPoint, PclPoint, PclGaussianKernel> convolution;
+  pcl::filters::Convolution3D<PclPoint, PclPoint, PclGaussianKernel>
+      convolution;
   // OK set the input cloud and search surface.
   kernel->setInputCloud(input_cloud);
   convolution.setKernel(*kernel);
   convolution.setSearchMethod(tree);
+  Mesh *current_mesh;
   for (int i = 0; i < num_scales; ++i) {
+    current_mesh = output[i];
     convolution.setRadiusSearch(scales[i]);
     convolution.convolve(*output_cloud);
+    for (int j = 0; j < current_mesh->vertices.rows(); ++j)
+      current_mesh->vertices.row(j) = PclPointToEigen(output_cloud->points[i]);
   }
 }
 
@@ -61,7 +70,8 @@ void ComputeMeshGaussian(const Mesh &mesh,
 //   G  #G by 3 list of output face indices into U (can be same ref as G)
 //   J  #G list of indices into F of birth face
 //   I  #U list of indices into V of birth vertices
-void ComputeSaliency(const Mesh &mesh, float downsample_factor) {
+void ComputeSaliency(const Mesh &mesh, double downsample_factor, double *scales,
+                     int num_scales) {
   Eigen::MatrixXd output_vertices;
   Eigen::MatrixXi output_faces;
   Eigen::VectorXi birth_faces;
@@ -69,6 +79,9 @@ void ComputeSaliency(const Mesh &mesh, float downsample_factor) {
   igl::qslim(mesh.vertices, mesh.faces,
              ceil(downsample_factor * mesh.faces.rows()), output_vertices,
              output_faces, birth_faces, birth_vertices);
+  std::vector<Mesh *> smoothed_meshes(num_scales);
+  for (int i = 0; i < num_scales; ++i) smoothed_meshes[i] = new Mesh;
+  ComputeMeshGaussian(mesh, scales, num_scales, &smoothed_meshes[0]);
 }
 
 // This is the Viewer initialization callback.
@@ -149,8 +162,6 @@ int main(int argc, char *argv[]) {
   igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
                           mesh.basename, mesh.extension, mesh.filename);
 
-  ComputeSaliency(mesh, 1.0);
-
   // Get the minimum and maximum extents.
   mesh.bounds.lo = mesh.vertices.colwise().minCoeff();
   mesh.bounds.hi = mesh.vertices.colwise().maxCoeff();
@@ -165,6 +176,12 @@ int main(int argc, char *argv[]) {
   mesh.center = Eigen::Vector3d(0.0, 0.0, 0.0);
   mesh.bounds.hi /= extent;
   mesh.bounds.lo /= extent;
+
+  int num_scales = 5;
+  double scale_base = 0.02 * extent;
+  double scales[5] = {1.0 * scale_base, 2.0 * scale_base, 3.0 * scale_base,
+                      4.0 * scale_base, 5.0 * scale_base};
+  ComputeSaliency(mesh, 1.0, scales, num_scales);
 
   ViewSetting view_setting =
       ViewSetting(window_width, window_height, Eigen::Vector3d(0.0, 0.0, 3.0),
