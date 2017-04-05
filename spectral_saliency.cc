@@ -9,12 +9,14 @@
 
 #define IGL_VIEWER_VIEWER_QUIET
 
+#include <igl/cotmatrix.h>
 #include <igl/look_at.h>
 #include <igl/png/writePNG.h>
 #include <igl/qslim.h>
 #include <igl/readOFF.h>
 #include <igl/read_triangle_mesh.h>
 #include <igl/viewer/Viewer.h>
+#include <pcl/common/point_operators.h>
 #include <pcl/filters/convolution_3d.h>
 #include <pcl/point_types.h>
 
@@ -31,7 +33,6 @@ int window_height = 256;
 std::string input_directory;
 
 typedef pcl::PointXYZ PclPoint;
-typedef pcl::filters::GaussianKernel<PclPoint, PclPoint> PclGaussianKernel;
 typedef pcl::search::KdTree<PclPoint> PclKdtree;
 typedef pcl::PointCloud<PclPoint> PclPointCloud;
 
@@ -39,65 +40,176 @@ Eigen::Vector3d PclPointToEigen(const PclPoint &point) {
   return Eigen::Vector3d(point.x, point.y, point.z);
 }
 
-void ComputeMeshGaussian(const Mesh &mesh, const double *scales, int num_scales,
-                         Mesh **output) {
-  // Compute Gaussian filter.  Use PCL for this, since libigl sucks.
-  PclPointCloud::Ptr input_cloud(new PclPointCloud());
-  PclPointCloud::Ptr output_cloud(new PclPointCloud());
-  // Search tree for this.  Really don't have to code.
-  PclKdtree::Ptr tree(new PclKdtree());
-  // Setup the kernel.
-  PclGaussianKernel::Ptr kernel(new PclGaussianKernel());
-  // Setup the convolution.
-  pcl::filters::Convolution3D<PclPoint, PclPoint, PclGaussianKernel>
-      convolution;
-  // OK set the input cloud and search surface.
-  kernel->setInputCloud(input_cloud);
-  convolution.setKernel(*kernel);
-  convolution.setSearchMethod(tree);
-  Mesh *current_mesh;
-  for (int i = 0; i < num_scales; ++i) {
-    current_mesh = output[i];
-    convolution.setRadiusSearch(scales[i]);
-    convolution.convolve(*output_cloud);
-    for (int j = 0; j < current_mesh->vertices.rows(); ++j)
-      current_mesh->vertices.row(j) = PclPointToEigen(output_cloud->points[i]);
-  }
+PclPoint EigenToPclPoint(const Eigen::Vector3d &point) {
+  return PclPoint(point[0], point[1], point[2]);
 }
 
-void ComputeModifiedMeshGaussian(const Mesh &mesh, const double *scales,
-                                 int num_scales, Mesh **output) {
-  // Compute Gaussian filter.  Use PCL for this, since libigl sucks.
-  PclPointCloud::Ptr input_cloud(new PclPointCloud());
-  PclPointCloud::Ptr output_cloud(new PclPointCloud());
-  // Search tree for this.  Really don't have to code.
-  PclKdtree::Ptr tree(new PclKdtree());
-  // TODO: Compute the gaussian of each vertex based on its 1-ring neighbors.
+float ComputeGaussian(float x, float sigma) {
+  return exp(-(x * x) / (2 * sigma * sigma));
 }
 
-// Outputs:
-//   U  #U by dim list of output vertex posistions (can be same ref as V)
-//   G  #G by 3 list of output face indices into U (can be same ref as G)
-//   J  #G list of indices into F of birth face
-//   I  #U list of indices into V of birth vertices
-void ComputeSaliency(const Mesh &mesh, double downsample_factor, double *scales,
-                     int num_scales) {
-  Eigen::MatrixXd output_vertices;
-  Eigen::MatrixXi output_faces;
-  Eigen::VectorXi birth_faces;
-  Eigen::VectorXi birth_vertices;
-  igl::qslim(mesh.vertices, mesh.faces,
-             ceil(downsample_factor * mesh.faces.rows()), output_vertices,
-             output_faces, birth_faces, birth_vertices);
-  std::vector<Mesh *> gaussian_smoothed_meshes(num_scales);
-  std::vector<Mesh *> modified_gaussian_smoothed_meshes(num_scales);
-  for (int i = 0; i < num_scales; ++i) {
-    gaussian_smoothed_meshes[i] = new Mesh;
-    modified_gaussian_smoothed_meshes[i] = new Mesh;
+void ComputeGaussianPoint(const Mesh &mesh, int i, PclKdtree::Ptr tree,
+                          double sigma, Eigen::VectorXd *output) {
+  Eigen::Vector3d result;
+  std::vector<int> neighbor_indices;
+  std::vector<float> neighbor_distances;
+  PclPoint input_point = EigenToPclPoint(mesh.vertices.row(i));
+  if (pcl::isFinite(input_point) &&
+      tree->radiusSearch(i, sigma, neighbor_indices, neighbor_distances)) {
+    double total_weight = 0.0;
+    for (int k = 0; k < neighbor_indices.size(); ++k) {
+      double weight = ComputeGaussian(neighbor_distances[k], sigma);
+      result += weight * mesh.vertices.row(neighbor_distances[k]);
+      total_weight += weight;
+    }
+    result /= total_weight;
   }
-  ComputeMeshGaussian(mesh, scales, num_scales, &gaussian_smoothed_meshes[0]);
-  ComputeModifiedMeshGaussian(mesh, scales, num_scales,
-                              &modified_gaussian_smoothed_meshes[0]);
+  *output = result;
+}
+
+void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
+                              const Eigen::MatrixXi &indices,
+                              Eigen::SparseMatrix<double> &weighted_adjacency) {
+  weighted_adjacency.resize(vertices.rows(), vertices.rows());
+  weighted_adjacency.setZero();
+  std::vector<Eigen::Triplet<double>> triples;
+  for (int i = 0; i < indices.rows(); ++i) {
+    int fi = indices.row(i)(0);
+    int fj = indices.row(i)(1);
+    int fk = indices.row(i)(2);
+    double fi_fj_norm2 = (vertices.row(fi) - vertices.row(fj)).squaredNorm();
+    double fi_fk_norm2 = (vertices.row(fi) - vertices.row(fk)).squaredNorm();
+    double fj_fk_norm2 = (vertices.row(fj) - vertices.row(fk)).squaredNorm();
+    triples.push_back(Eigen::Triplet<double>(fi, fj, fi_fj_norm2));
+    triples.push_back(Eigen::Triplet<double>(fj, fi, fi_fj_norm2));
+    triples.push_back(Eigen::Triplet<double>(fi, fk, fi_fk_norm2));
+    triples.push_back(Eigen::Triplet<double>(fk, fi, fi_fk_norm2));
+    triples.push_back(Eigen::Triplet<double>(fj, fk, fj_fk_norm2));
+    triples.push_back(Eigen::Triplet<double>(fk, fj, fj_fk_norm2));
+  }
+  // Compute the adjacency from triplets.
+  // NOTE: a lambda is passed to avoid summing on duplicate, the default
+  // behavior in Eigen.
+  weighted_adjacency.setFromTriplets(
+      triples.begin(), triples.end(),
+      [](const double &, const double &b) -> double { return b; });
+}
+
+void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
+                         const Eigen::MatrixXi &indices,
+                         Eigen::VectorXd &saliency) {
+  // Get eigensolver ready.
+  Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
+  // Compute the cotangent matrix.
+  Eigen::SparseMatrix<double> cotmatrix;
+  // Get the eigenvalues of this matrix.
+  igl::cotmatrix(vertices, indices, cotmatrix);
+  // Solve.
+  solver.compute(-cotmatrix);
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  Eigen::VectorXd log_laplacian = eigenvalues.unaryExpr(
+      [](double x) -> double { return (x > 0.0 ? std::log(x) : x); });
+  // Compute the averaging filter, J_n.
+  Eigen::VectorXd averaging_filter;
+  averaging_filter.setOnes();
+  averaging_filter /= vertices.rows();
+  // Get average response A.
+  Eigen::MatrixXd average = averaging_filter * log_laplacian;
+  // Compute the spectral irregularity, R(f).
+  Eigen::VectorXd irregularity = (log_laplacian - average).cwiseAbs();
+  // Get the R matrix, which is exp(diag(R(f)).  Since this a diagonal
+  // matrix, just take the std::exp of its entries.
+  Eigen::VectorXd r_diagonal = irregularity.diagonal().unaryExpr(
+      [](double x) -> double { return std::exp(x); });
+  // Compute weighted adjacency matrix, W.
+  Eigen::SparseMatrix<double> weighted_adjacency;
+  ComputeWeightedAdjacency(vertices, indices, weighted_adjacency);
+  // Compute the saliency S = B*R*B^T * W.
+  Eigen::MatrixXd lhs = solver.eigenvectors() * r_diagonal.asDiagonal() *
+                        solver.eigenvectors().transpose();
+  saliency = (lhs * weighted_adjacency).colwise().sum();
+}
+
+void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
+                               const double *scales, int num_scales,
+                               Eigen::VectorXd &saliency) {
+  // Compute scale factor, will use this later.
+  double scale_factor = 1.0f;
+  Eigen::VectorXd extents;
+  Eigen::VectorXd lo = mesh.vertices.colwise().minCoeff();
+  Eigen::VectorXd hi = mesh.vertices.colwise().maxCoeff();
+  extents = hi - lo;
+  scale_factor = 0.02 * extents.norm();
+
+  // Decimate the mesh.
+  Eigen::VectorXi birth_face_indices;
+  Eigen::VectorXi birth_vertex_indices;
+  Mesh decimated_mesh;
+  decimated_mesh.faces.resize(max_faces, 3);
+  decimated_mesh.vertices.resize(mesh.vertices.rows(), 3);
+  birth_face_indices.resize(max_faces);
+  birth_vertex_indices.resize(mesh.vertices.rows());
+
+  igl::qslim(mesh.vertices, mesh.faces, max_faces, decimated_mesh.vertices,
+             decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
+
+  // Set saliency to zero.
+  saliency = Eigen::VectorXd::Zero(decimated_mesh.vertices.rows());
+
+  // Used to compute Gaussian filter.
+  PclPointCloud::Ptr input_cloud(new PclPointCloud());
+  // Search tree for this.  Really don't want to code.
+  PclKdtree::Ptr tree(new PclKdtree());
+
+  // Populate the point cloud.
+  for (int i = 0; i < decimated_mesh.vertices.rows(); ++i)
+    input_cloud->push_back(EigenToPclPoint(decimated_mesh.vertices.row(i)));
+
+  // Set the input cloud for the kd-tree.
+  tree->setInputCloud(input_cloud);
+
+  Eigen::MatrixXd vertices1;  // These vertices represent M(t).
+  Eigen::MatrixXd vertices2;  // These vertices represent M(k(i) *t).
+
+  // For each scale compute M(t) and M(k(i)t).
+  for (int j = 0; j < num_scales; ++j) {
+    // For each point do a search to get its equivalent two points in
+    // M(t) and M(k(i)t).
+    for (int i = 0; i < decimated_mesh.vertices.rows(); ++i) {
+      const PclPoint &input_point = input_cloud->points[i];
+      std::vector<int> neighbor_indices;
+      std::vector<float> neighbor_distances;
+      double sigma = scales[j];
+      // Get the first gaussian F(p_i, t)
+      Eigen::VectorXd result;
+      ComputeGaussianPoint(decimated_mesh, i, tree, sigma, &result);
+      vertices1.row(i) = result;
+      // Get the second gaussian F(p_i, k(i) * t).
+      ComputeGaussianPoint(decimated_mesh, i, tree, sigma, &result);
+      vertices2.row(i) = result;
+    }
+    // Compute the saliency S(i, t).
+    Eigen::VectorXd saliency1;
+    ComputeMeshSaliency(vertices1, decimated_mesh.faces, saliency1);
+    // Compute the saliency S(i, k(i) * t).
+    Eigen::VectorXd saliency2;
+    ComputeMeshSaliency(vertices2, decimated_mesh.faces, saliency2);
+    // Compute S'(i, t) = |S(i, k(i) * t) - S(i, t)|.
+    Eigen::VectorXd saliency_t = (saliency2 - saliency1).cwiseAbs();
+
+    // Obtain S(v, t) by method in 3.3.
+    // For each vertex v in M, find closest point in simplified decimated_mesh
+    // M', and map the saliency of that point to S(v, t).
+    for (int j = 0; j < decimated_mesh.vertices.rows(); ++j) {
+      const PclPoint &input_point = input_cloud->points[j];
+      std::vector<int> neighbor_indices;
+      std::vector<float> neighbor_distances;
+      tree->nearestKSearch(input_point, 1, neighbor_indices,
+                           neighbor_distances);
+      // Sum into the current saliency value.
+      saliency(j) += saliency_t(neighbor_indices[0]);
+    }
+  }
 }
 
 // This is the Viewer initialization callback.
@@ -193,11 +305,14 @@ int main(int argc, char *argv[]) {
   mesh.bounds.hi /= extent;
   mesh.bounds.lo /= extent;
 
+  Eigen::VectorXd saliency(mesh.vertices.rows());
+
+  int max_vertices = 1000;
   int num_scales = 5;
   double scale_base = 0.02 * extent;
   double scales[5] = {1.0 * scale_base, 2.0 * scale_base, 3.0 * scale_base,
                       4.0 * scale_base, 5.0 * scale_base};
-  ComputeSaliency(mesh, 1.0, scales, num_scales);
+  ComputeMultiScaleSaliency(mesh, max_vertices, scales, num_scales, saliency);
 
   ViewSetting view_setting =
       ViewSetting(window_width, window_height, Eigen::Vector3d(0.0, 0.0, 3.0),
