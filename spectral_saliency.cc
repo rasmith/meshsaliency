@@ -248,10 +248,13 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
                            neighbor_distances);
       assert(neighbor_indices[0] >= 0 &&
              neighbor_indices[0] < saliency_t.rows());
-      // Sum into the current saliency value.
+      // Sum into the current saliency value from S(v, t) into S'(v).
       saliency(j) += saliency_t(neighbor_indices[0]);
     }
   }
+  // Get saliency S(v) = log S'(v).
+  for (int j = 0; j < mesh.vertices.rows(); ++j)
+    saliency(j) = std::log(saliency(j));
 }
 
 // This is the Viewer initialization callback.
