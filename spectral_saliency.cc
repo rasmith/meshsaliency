@@ -230,17 +230,24 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
     ComputeMeshSaliency(vertices2, decimated_mesh.faces, saliency2);
     // Compute S'(i, t) = |S(i, k(i) * t) - S(i, t)|.
     Eigen::VectorXd saliency_t = (saliency2 - saliency1).cwiseAbs();
+    LOG(DEBUG) << "ComputeMultiScaleSaliency:  #saliency1 = "
+               << saliency1.rows() << " #saliency2 = " << saliency2.rows()
+               << "\n";
     LOG(DEBUG) << "ComputeMultiScaleSaliency: reproject saliency.\n";
+    LOG(DEBUG) << "ComputeMultiScaleSaliency: #saliency = " << saliency.rows()
+               << "\n";
 
     // Obtain S(v, t) by method in 3.3.
     // For each vertex v in M, find closest point in simplified decimated_mesh
     // M', and map the saliency of that point to S(v, t).
     for (int j = 0; j < mesh.vertices.rows(); ++j) {
-      const PclPoint &input_point = input_cloud->points[j];
+      PclPoint input_point = EigenToPclPoint(mesh.vertices.row(j));
       std::vector<int> neighbor_indices;
       std::vector<float> neighbor_distances;
       tree->nearestKSearch(input_point, 1, neighbor_indices,
                            neighbor_distances);
+      assert(neighbor_indices[0] >= 0 &&
+             neighbor_indices[0] < saliency_t.rows());
       // Sum into the current saliency value.
       saliency(j) += saliency_t(neighbor_indices[0]);
     }
@@ -352,6 +359,7 @@ int main(int argc, char *argv[]) {
 
   LOG(DEBUG) << "Compute saliency.\n";
   ComputeMultiScaleSaliency(mesh, max_vertices, scales, num_scales, saliency);
+  LOG(DEBUG) << "Compute jet colors.\n";
   igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
   LOG(DEBUG) << "#mesh.colors() = " << mesh.colors.rows() << "\n";
 
