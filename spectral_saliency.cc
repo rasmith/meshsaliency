@@ -11,6 +11,7 @@
 #define IGL_VIEWER_VIEWER_QUIET
 
 #include <igl/cotmatrix.h>
+#include <igl/jet.h>
 #include <igl/look_at.h>
 #include <igl/png/writePNG.h>
 #include <igl/qslim.h>
@@ -175,7 +176,7 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
              << decimated_mesh.vertices.rows()
              << " #f = " << decimated_mesh.faces.rows() << ".\n";
   // Set saliency to zero.
-  saliency = Eigen::VectorXd::Zero(decimated_mesh.vertices.rows());
+  saliency = Eigen::VectorXd::Zero(mesh.vertices.rows());
 
   LOG(DEBUG) << "ComputeMultiScaleSaliency: create point cloud.\n";
   // Used to compute Gaussian filter.
@@ -195,7 +196,7 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
   // These vertices represent M(t).
   Eigen::MatrixXd vertices1(decimated_mesh.vertices.rows(), 3);
   // These vertices represent M(k(i) *t).
-  Eigen::MatrixXd vertices2(decimated_mesh.vertices.rows(), 3); 
+  Eigen::MatrixXd vertices2(decimated_mesh.vertices.rows(), 3);
 
   // For each scale compute M(t) and M(k(i)t).
   for (int j = 0; j < num_scales; ++j) {
@@ -219,9 +220,8 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
     }
     LOG(DEBUG)
         << "ComputeMultiScaleSaliency: compute scale space mesh saliency.\n";
-    //LOG(DEBUG)
-        //<< "ComputeMultiScaleSaliency: #v1 = " << vertices1.rows()
-        //<< "  #v2 = " << vertices2.rows() << "\n";
+    LOG(DEBUG) << "ComputeMultiScaleSaliency: #v1 = " << vertices1.rows()
+               << "  #v2 = " << vertices2.rows() << "\n";
     // Compute the saliency S(i, t).
     Eigen::VectorXd saliency1(vertices1.rows());
     ComputeMeshSaliency(vertices1, decimated_mesh.faces, saliency1);
@@ -235,7 +235,7 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
     // Obtain S(v, t) by method in 3.3.
     // For each vertex v in M, find closest point in simplified decimated_mesh
     // M', and map the saliency of that point to S(v, t).
-    for (int j = 0; j < decimated_mesh.vertices.rows(); ++j) {
+    for (int j = 0; j < mesh.vertices.rows(); ++j) {
       const PclPoint &input_point = input_cloud->points[j];
       std::vector<int> neighbor_indices;
       std::vector<float> neighbor_distances;
@@ -296,6 +296,11 @@ void RunViewer(Mesh &mesh, const ViewSetting *view_setting) {
   // Plot the mesh.
   igl::viewer::Viewer viewer;                       // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
+  LOG(DEBUG) << "RunViewer: #mesh.colors = " << mesh.colors.rows()
+             << " #mesh.vertices = " << mesh.vertices.rows() << "\n";
+  if (mesh.colors.rows() > 0 && mesh.colors.rows() == mesh.vertices.rows()) {
+    viewer.data.set_colors(mesh.colors);
+  }
   viewer.core.show_lines = false;
   viewer.callback_init =
       std::bind(ViewerInit, std::placeholders::_1, view_setting);
@@ -347,6 +352,8 @@ int main(int argc, char *argv[]) {
 
   LOG(DEBUG) << "Compute saliency.\n";
   ComputeMultiScaleSaliency(mesh, max_vertices, scales, num_scales, saliency);
+  igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
+  LOG(DEBUG) << "#mesh.colors() = " << mesh.colors.rows() << "\n";
 
   LOG(DEBUG) << "Normalize mesh.\n";
 

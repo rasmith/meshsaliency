@@ -14,6 +14,7 @@ struct BoundingBox {
 struct Mesh {
   Eigen::MatrixXd vertices;
   Eigen::MatrixXi faces;
+  Eigen::MatrixXd colors;
   BoundingBox bounds;
   Eigen::Vector3d center;
 	std::string basename;
