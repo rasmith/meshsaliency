@@ -71,7 +71,7 @@ void ComputeGaussianPoint(const Mesh &mesh, int i, PclKdtree::Ptr tree,
     double total_weight = 0.0;
     for (int k = 0; k < neighbor_indices.size(); ++k) {
       double weight = ComputeGaussian(neighbor_distances[k], sigma);
-      result += weight * mesh.vertices.row(neighbor_distances[k]);
+      result += weight * mesh.vertices.row(neighbor_indices[k]);
       total_weight += weight;
     }
     result /= total_weight;
@@ -136,10 +136,6 @@ void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
   LOG(DEBUG) << "ComputeMeshSaliency: compute log.\n";
   Eigen::VectorXd log_laplacian = eigenvalues.unaryExpr(
       [](double x) -> double { return (x > 0.0 ? std::log(x) : x); });
-  // Compute the averaging filter, J_n.
-  Eigen::VectorXd averaging_filter;
-  averaging_filter.setOnes();
-  averaging_filter /= vertices.rows();
   LOG(DEBUG) << "ComputeMeshSaliency: apply averaging filter.\n";
   // Get average response A.
   Eigen::VectorXd average(vertices.rows());
@@ -249,6 +245,7 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
       // Get the first gaussian F(p_i, t)
       Eigen::VectorXd result;
       ComputeGaussianPoint(decimated_mesh, i, tree, sigma, &result);
+      //std::cout << "gaussian_point("<<i<<")"<<result << "\n";
       vertices1.row(i) = result;
       // Get the second gaussian F(p_i, k(i) * t).
       ComputeGaussianPoint(decimated_mesh, i, tree, scale_factors(i) * sigma,
