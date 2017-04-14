@@ -46,6 +46,16 @@ PclPoint EigenToPclPoint(const Eigen::Vector3d &point) {
   return PclPoint(point[0], point[1], point[2]);
 }
 
+double ComputeAveragePairwiseDistance(const Eigen::MatrixXd &vertices) {
+  double result = 0.0;
+  int n = vertices.rows();
+  for (int i = 0; i < n; ++i)
+    for (int j = i + 1; j < n; ++j)
+      result += (vertices.row(i) - vertices.row(j)).norm();
+  result /= ((n * (n - 1)) / 2);
+  return result;
+}
+
 float ComputeGaussian(float x, float sigma) {
   return exp(-(x * x) / (2 * sigma * sigma));
 }
@@ -132,7 +142,17 @@ void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
   averaging_filter /= vertices.rows();
   LOG(DEBUG) << "ComputeMeshSaliency: apply averaging filter.\n";
   // Get average response A.
-  Eigen::MatrixXd average = averaging_filter * log_laplacian;
+  Eigen::VectorXd average(vertices.rows());
+  int filter_size = 9;
+  average.setZero();
+  for (int i = 0; i < vertices.rows(); ++i) {
+    for (int j = -filter_size / 2; j <= filter_size / 2; ++j) {
+      int index = i + j;
+      average(i) +=
+          (index > 0 && index < vertices.rows() ? log_laplacian(index) : 0);
+    }
+  }
+  average /= filter_size;
   LOG(DEBUG) << "ComputeMeshSaliency: compute irregularity.\n";
   // Compute the spectral irregularity, R(f).
   Eigen::VectorXd irregularity = (log_laplacian - average).cwiseAbs();
@@ -154,12 +174,6 @@ void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
 void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
                                const double *scales, int num_scales,
                                Eigen::VectorXd &saliency) {
-  // Compute scale factor, will use this later.
-  double scale_factor = 0.02 * (mesh.bounds.hi - mesh.bounds.lo).norm();
-
-  LOG(DEBUG) << "ComputeMultiScaleSaliency: scale_factor = " << scale_factor
-             << "\n";
-
   // Decimate the mesh.
   Eigen::VectorXi birth_face_indices;
   Eigen::VectorXi birth_vertex_indices;
@@ -175,6 +189,29 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
   LOG(DEBUG) << "ComputeMultiScaleSaliency: decimate #v = "
              << decimated_mesh.vertices.rows()
              << " #f = " << decimated_mesh.faces.rows() << ".\n";
+  // Compute average pairwise distance.
+  double average_pairwise =
+      ComputeAveragePairwiseDistance(decimated_mesh.vertices);
+  // Compute weighted adjacency and degree info.
+  Eigen::SparseMatrix<double> weighted_adjacency;
+  ComputeWeightedAdjacency(decimated_mesh.vertices, decimated_mesh.faces,
+                           weighted_adjacency);
+  Eigen::VectorXi degrees(decimated_mesh.vertices.rows());
+  for (int i = 0; i < weighted_adjacency.rows(); ++i) {
+    degrees(i) = static_cast<int>(
+        weighted_adjacency.row(i)
+            .unaryExpr([](const double &x) -> double { return 1.0; })
+            .sum());
+  }
+  Eigen::VectorXi scale_factors(decimated_mesh.vertices.rows());
+  // Compute k(i) for each vertex in the decimated mesh.
+  for (int i = 0; i < decimated_mesh.vertices.rows(); ++i) {
+    double denominator =
+        weighted_adjacency.row(i)
+            .unaryExpr([](const double &x) -> double { return sqrt(x); })
+            .sum();
+    scale_factors(i) = degrees(i) * average_pairwise / denominator + 1;
+  }
   // Set saliency to zero.
   saliency = Eigen::VectorXd::Zero(mesh.vertices.rows());
 
@@ -214,8 +251,8 @@ void ComputeMultiScaleSaliency(const Mesh &mesh, int max_faces,
       ComputeGaussianPoint(decimated_mesh, i, tree, sigma, &result);
       vertices1.row(i) = result;
       // Get the second gaussian F(p_i, k(i) * t).
-      ComputeGaussianPoint(decimated_mesh, i, tree, sigma, &result);
-      sigma *= scale_factor;
+      ComputeGaussianPoint(decimated_mesh, i, tree, scale_factors(i) * sigma,
+                           &result);
       vertices2.row(i) = result;
     }
     LOG(DEBUG)
@@ -356,6 +393,7 @@ int main(int argc, char *argv[]) {
   int max_vertices = 1000;
   int num_scales = 5;
   double scale_base = 0.02 * extent;
+  scale_base *= scale_base;
   double scales[5] = {1.0 * scale_base, 2.0 * scale_base, 3.0 * scale_base,
                       4.0 * scale_base, 5.0 * scale_base};
   Eigen::VectorXd saliency(mesh.vertices.rows());
