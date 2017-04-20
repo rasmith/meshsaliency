@@ -75,3 +75,12 @@ target_link_libraries(spectral_saliency ${LIBIGL_LIBRARIES}
                           ${LIBIGL_PNG_EXTRA_LIBRARIES}
                           ${PCL_LIBRARIES})
 
+# Compile and link test_geometry_processing executable.
+add_executable(test_geometry_processing test_geometry_processing.cc \
+                                        geometry_processing.cc)
+target_link_libraries(test_geometry_processing ${LIBIGL_LIBRARIES}
+                          ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
+                          ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
+                          ${LIBIGL_OPENGL_GLFW_EXTRA_LIBRARIES}
+                          ${LIBIGL_PNG_EXTRA_LIBRARIES}
+                          ${PCL_LIBRARIES})
