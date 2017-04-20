@@ -120,6 +120,57 @@ int main(int argc, char *argv[]) {
   igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
                           mesh.basename, mesh.extension, mesh.filename);
 
+  // Decimate.
+  int max_faces = 1000;
+  Eigen::VectorXi birth_face_indices;
+  Eigen::VectorXi birth_vertex_indices;
+  Mesh decimated_mesh;
+  decimated_mesh.faces.resize(max_faces, 3);
+  decimated_mesh.vertices.resize(mesh.vertices.rows(), 3);
+  birth_face_indices.resize(max_faces);
+  birth_vertex_indices.resize(mesh.vertices.rows());
+
+  igl::qslim(mesh.vertices, mesh.faces, max_faces, decimated_mesh.vertices,
+             decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
+  mesh.vertices = decimated_mesh.vertices;
+  mesh.faces = decimated_mesh.faces;
+
+  PclPointCloud::Ptr input_cloud(new PclPointCloud());
+
+  // Populate the point cloud.
+  for (int i = 0; i < mesh.vertices.rows(); ++i)
+    input_cloud->push_back(EigenToPclPoint(mesh.vertices.row(i)));
+
+  PclKdtree::Ptr tree(new PclKdtree());
+  tree->setInputCloud(input_cloud);
+
+  // Smooth.
+  Eigen::MatrixXd smoothed_vertices(mesh.vertices.rows(), mesh.vertices.cols());
+  double sigma =
+      0.02 *
+      (mesh.vertices.colwise().maxCoeff() - mesh.vertices.colwise().minCoeff())
+          .norm();
+  for (int i = 0; i < mesh.vertices.rows(); ++i) {
+    Eigen::VectorXd result;
+    ComputeGaussianPoint(mesh, i, tree, sigma, &result);
+    smoothed_vertices.row(i) = result;
+  }
+  int ccw = 0, not_ccw = 0;
+  for (int i = 0; i < mesh.faces.rows(); ++i) {
+    Eigen::VectorXi face = mesh.faces.row(i);
+    Eigen::Vector3d vi = mesh.vertices.row(face(0));
+    Eigen::Vector3d vj = mesh.vertices.row(face(1));
+    Eigen::Vector3d vk = mesh.vertices.row(face(2));
+    Eigen::Vector3d normal = (vj - vi).cross(vk - vi);
+    if (IsCCW(vi, vj, vk))
+      ++ccw;
+    else
+      ++not_ccw;
+  }
+  LOG(DEBUG) << "Encountered " << ccw << " CCW faces and " << not_ccw
+             << " non-CCW faces.\n";
+  mesh.vertices = smoothed_vertices;
+
   // Get the minimum and maximum extents.
   mesh.bounds.lo = mesh.vertices.colwise().minCoeff();
   mesh.bounds.hi = mesh.vertices.colwise().maxCoeff();
@@ -130,31 +181,7 @@ int main(int argc, char *argv[]) {
              << " bounds.max = " << mesh.bounds.hi << " extent = " << extent
              << "\n";
 
-  // Compute the saliency.
-  int max_vertices = 1000;
-  int num_scales = 5;
-  double scale_base = 0.02 * extent;
-  scale_base *= scale_base;
-  double scales[5] = {1.0 * scale_base, 2.0 * scale_base, 3.0 * scale_base,
-                      4.0 * scale_base, 5.0 * scale_base};
-  Eigen::VectorXd saliency(mesh.vertices.rows());
-
-  LOG(DEBUG) << "Compute saliency.\n";
-  ComputeMultiScaleSaliency(mesh, max_vertices, scales, num_scales, saliency);
-  LOG(DEBUG) << "Compute jet colors.\n";
-  igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
-  LOG(DEBUG) << "#mesh.colors() = " << mesh.colors.rows() << "\n";
-
   LOG(DEBUG) << "Normalize mesh.\n";
-
-  // Resize mesh.
-  for (int i = 0; i < mesh.vertices.rows(); ++i) {
-    mesh.vertices.row(i) -= center;
-    mesh.vertices.row(i) /= extent;
-  }
-  mesh.center = Eigen::Vector3d(0.0, 0.0, 0.0);
-  mesh.bounds.hi /= extent;
-  mesh.bounds.lo /= extent;
 
   ViewSetting view_setting =
       ViewSetting(window_width, window_height, Eigen::Vector3d(0.0, 0.0, 3.0),

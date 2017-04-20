@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "geometry.h"
 
 #include <igl/cotmatrix.h>
 #include <pcl/common/point_operators.h>
@@ -15,12 +16,16 @@ Eigen::Vector3d PclPointToEigen(const PclPoint &point);
 
 PclPoint EigenToPclPoint(const Eigen::Vector3d &point);
 
+bool IsCCW(const Eigen::Vector3d &a, const Eigen::Vector3d &b,
+           const Eigen::Vector3d &c);
+
 double ComputeAveragePairwiseDistance(const Eigen::MatrixXd &vertices);
 
 float ComputeGaussian(float x, float sigma);
 
-void ComputeGaussianPoint(const geometry::Mesh &mesh, int i, PclKdtree::Ptr tree,
-                          double sigma, Eigen::VectorXd *output);
+void ComputeGaussianPoint(const geometry::Mesh &mesh, int i,
+                          PclKdtree::Ptr tree, double sigma,
+                          Eigen::VectorXd *output);
 
 void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
                               const Eigen::MatrixXi &indices,

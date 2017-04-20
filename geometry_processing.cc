@@ -1,6 +1,6 @@
+#include "geometry_processing.h"
 #include "common.h"
 #include "geometry.h"
-#include "geometry_processing.h"
 #include "logger.h"
 
 #include <igl/cotmatrix.h>
@@ -10,12 +10,18 @@
 #include <pcl/filters/convolution_3d.h>
 #include <pcl/point_types.h>
 
+
+bool IsCCW(const Eigen::Vector3d &a, const Eigen::Vector3d &b,
+           const Eigen::Vector3d &c) {
+   return (b(0) - a(0))*(c(1) - a(1)) - (b(1) - a(1))*(c(0) - a(0));
+}
+
 Eigen::Vector3d PclPointToEigen(const PclPoint &point) {
-    return Eigen::Vector3d(point.x, point.y, point.z);
+  return Eigen::Vector3d(point.x, point.y, point.z);
 }
 
 PclPoint EigenToPclPoint(const Eigen::Vector3d &point) {
-    return PclPoint(point[0], point[1], point[2]);
+  return PclPoint(point[0], point[1], point[2]);
 }
 
 double ComputeAveragePairwiseDistance(const Eigen::MatrixXd &vertices) {
@@ -29,17 +35,20 @@ double ComputeAveragePairwiseDistance(const Eigen::MatrixXd &vertices) {
 }
 
 float ComputeGaussian(float x, float sigma) {
-  return exp(-(x * x) / (2 * sigma * sigma));
+  return exp(-(x * x) / (2.0 * sigma * sigma));
 }
 
-void ComputeGaussianPoint(const geometry::Mesh &mesh, int i, PclKdtree::Ptr tree,
-                          double sigma, Eigen::VectorXd *output) {
+void ComputeGaussianPoint(const geometry::Mesh &mesh, int i,
+                          PclKdtree::Ptr tree, double sigma,
+                          Eigen::VectorXd *output) {
   Eigen::Vector3d result;
+  result.setZero();
   std::vector<int> neighbor_indices;
   std::vector<float> neighbor_distances;
   PclPoint input_point = EigenToPclPoint(mesh.vertices.row(i));
   if (pcl::isFinite(input_point) &&
-      tree->radiusSearch(i, sigma, neighbor_indices, neighbor_distances)) {
+      tree->radiusSearch(i, 2.0 * sigma, neighbor_indices,
+                         neighbor_distances)) {
     double total_weight = 0.0;
     for (int k = 0; k < neighbor_indices.size(); ++k) {
       double weight = ComputeGaussian(neighbor_distances[k], sigma);
@@ -47,8 +56,10 @@ void ComputeGaussianPoint(const geometry::Mesh &mesh, int i, PclKdtree::Ptr tree
       total_weight += weight;
     }
     result /= total_weight;
+    *output = result;
+  } else {
+    *output = mesh.vertices.row(i);
   }
-  *output = result;
 }
 
 void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
