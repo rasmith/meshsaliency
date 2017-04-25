@@ -36,6 +36,15 @@ void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
 			      const Eigen::MatrixXi &indices,
 			      Eigen::SparseMatrix<double> &weighted_adjacency);
 
+void ComputeMeshIrregularity(
+    const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,
+    Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> &solver,
+    Eigen::VectorXd &irregularity);
+
+void ComputeMeshSaliencyMatrix(const Eigen::MatrixXd &vertices,
+			       const Eigen::MatrixXi &indices,
+			       Eigen::MatrixXd &saliency);
+
 void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
 			 const Eigen::MatrixXi &indices,
 			 Eigen::VectorXd &saliency);

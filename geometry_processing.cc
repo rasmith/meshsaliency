@@ -197,11 +197,11 @@ void ComputeLogLaplacianSpectrum(
       [](double x) -> double { return std::log(std::abs(x)); });
 }
 
-void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
-			 const Eigen::MatrixXi &indices,
-			 Eigen::VectorXd &saliency) {
+void ComputeMeshIrregularity(
+    const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,
+    Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> &solver,
+    Eigen::VectorXd &irregularity) {
   Eigen::SparseMatrix<double> cotmatrix(vertices.rows(), vertices.rows());
-  Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
   Eigen::VectorXd log_laplacian_spectrum(vertices.rows());
   ComputeLogLaplacianSpectrum(vertices, indices, solver,
 			      log_laplacian_spectrum);
@@ -219,7 +219,15 @@ void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
   }
   average /= static_cast<double>(filter_size);
   // Compute the spectral irregularity, R(f).
-  Eigen::VectorXd irregularity = (log_laplacian_spectrum - average).cwiseAbs();
+  irregularity = (log_laplacian_spectrum - average).cwiseAbs();
+}
+
+void ComputeMeshSaliencyMatrix(const Eigen::MatrixXd &vertices,
+			       const Eigen::MatrixXi &indices,
+			       Eigen::MatrixXd &saliency) {
+  Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
+  Eigen::VectorXd irregularity(vertices.rows());
+  ComputeMeshIrregularity(vertices, indices, solver, irregularity);
   // Get the R matrix, which is exp(diag(R(f)).  Since this a diagonal
   // matrix, just take the std::exp of its entries.
   Eigen::VectorXd r_diagonal =
@@ -233,7 +241,15 @@ void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
   // Compute the saliency S = B*R*B^T * W.
   Eigen::MatrixXd lhs = solver.eigenvectors() * r_diagonal.asDiagonal() *
 			solver.eigenvectors().transpose();
-  saliency = (lhs * weighted_adjacency).rowwise().sum();
+  saliency = (lhs * weighted_adjacency);
+}
+
+void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
+			 const Eigen::MatrixXi &indices,
+			 Eigen::VectorXd &saliency) {
+  Eigen::MatrixXd saliency_matrix(vertices.rows(), vertices.rows());
+  ComputeMeshSaliencyMatrix(vertices, indices, saliency_matrix);
+  saliency = saliency_matrix.rowwise().sum();
 }
 
 void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,

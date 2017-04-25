@@ -153,7 +153,7 @@ int main(int argc, char *argv[]) {
 
   // Compute the saliency.
   int max_vertices = 1000;
-  int num_scales = 5;
+  int num_scales = 1;
   double scale_base = 0.002 * extent;
   scale_base *= scale_base;
   LOG(DEBUG) << "scale_base = " << scale_base << "\n";

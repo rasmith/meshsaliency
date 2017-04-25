@@ -5,6 +5,7 @@
 #include "view_setting.h"
 
 #include <cassert>
+#include <complex>
 #include <functional>
 #include <string>
 #include <vector>
@@ -115,6 +116,8 @@ int main(int argc, char *argv[]) {
   bool display_spectrum = false;
   bool display_saliency = false;
   bool display_eigenvector = false;
+  bool display_irregularity = false;
+  bool display_saliency_eigenvector = false;
 
   for (argv_index = 2; argv_index < argc; ++argv_index) {
     std::string option(argv[argv_index]);
@@ -129,6 +132,10 @@ int main(int argc, char *argv[]) {
       display_saliency = true;
     else if (option == "eigenvector")
       display_eigenvector = true;
+    else if (option == "irregularity")
+      display_irregularity = true;
+    else if (option == "saliency_eigenvector")
+      display_saliency_eigenvector = true;
   }
 
   // Make a mesh struct.
@@ -173,7 +180,7 @@ int main(int argc, char *argv[]) {
 		   (mesh.vertices.colwise().maxCoeff() -
 		    mesh.vertices.colwise().minCoeff())
 		       .norm();
-    double scale = 5.0 * sigma * sigma;
+    double scale = 1.0 * sigma * sigma;
     for (int i = 0; i < mesh.vertices.rows(); ++i) {
       Eigen::VectorXd result;
       ComputeGaussianPoint(mesh, i, tree, scale, 2.5 * sqrt(scale), &result);
@@ -213,15 +220,47 @@ int main(int argc, char *argv[]) {
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
     ComputeLogLaplacianSpectrum(mesh.vertices, mesh.faces, solver, spectrum);
     mesh.colors.resize(mesh.vertices.rows(), 3);
-		eigenvector = solver.eigenvectors().col(0);
+    eigenvector = solver.eigenvectors().col(0);
     double min_eigenvector = eigenvector.minCoeff();
     double max_eigenvector = eigenvector.maxCoeff();
     double avg_eigenvector = eigenvector.mean();
-    LOG(DEBUG) << std::setprecision(16) <<"min_eigenvector = " << min_eigenvector
+    LOG(DEBUG) << std::setprecision(16)
+	       << "min_eigenvector = " << min_eigenvector
 	       << " max_eigenvector = " << max_eigenvector
 	       << " avg_eigenvector = " << avg_eigenvector << "\n";
     igl::jet(eigenvector, eigenvector.minCoeff(), eigenvector.maxCoeff(),
 	     mesh.colors);
+  } else if (display_irregularity) {
+    Eigen::VectorXd irregularity(mesh.vertices.rows());
+    Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
+    ComputeMeshIrregularity(mesh.vertices, mesh.faces, solver, irregularity);
+    mesh.colors.resize(mesh.vertices.rows(), 3);
+    double min_irregularity = irregularity.minCoeff();
+    double max_irregularity = irregularity.maxCoeff();
+    double avg_irregularity = irregularity.mean();
+    LOG(DEBUG) << "min_irregularity = " << min_irregularity
+	       << " max_irregularity = " << max_irregularity
+	       << " avg_irregularity = " << avg_irregularity << "\n";
+    igl::jet(irregularity, irregularity.minCoeff(), irregularity.maxCoeff(),
+	     mesh.colors);
+  } else if (display_saliency_eigenvector) {
+    Eigen::VectorXd saliency_eigenvector(mesh.vertices.rows());
+    Eigen::MatrixXd saliency(mesh.vertices.rows(), mesh.vertices.rows());
+    Eigen::EigenSolver<Eigen::MatrixXd> solver;
+    ComputeMeshSaliencyMatrix(mesh.vertices, mesh.faces, saliency);
+    solver.compute(saliency);
+    saliency_eigenvector = solver.eigenvectors().col(0).unaryExpr(
+	[](const std::complex<double> &c) -> double { return std::abs(c); });
+    mesh.colors.resize(mesh.vertices.rows(), 3);
+    double min_saliency_eigenvector = saliency_eigenvector.minCoeff();
+    double max_saliency_eigenvector = saliency_eigenvector.maxCoeff();
+    double avg_saliency_eigenvector = saliency_eigenvector.mean();
+    LOG(DEBUG) << "min_saliency_eigenvector = " << min_saliency_eigenvector
+	       << " max_saliency_eigenvector = " << max_saliency_eigenvector
+	       << " avg_saliency_eigenvector = " << avg_saliency_eigenvector
+	       << "\n";
+    igl::jet(saliency_eigenvector, saliency_eigenvector.minCoeff(),
+	     saliency_eigenvector.maxCoeff(), mesh.colors);
   }
 
   LOG(DEBUG) << "Compute stats: bounds.min = " << mesh.bounds.lo
