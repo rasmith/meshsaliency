@@ -47,7 +47,7 @@ bool ViewerInit(igl::viewer::Viewer &viewer, const ViewSetting *view_setting) {
 
 // This is a pre render callback for the Viewr class.
 bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-                   const ViewSetting *view_setting) {
+		   const ViewSetting *view_setting) {
   viewer.core.camera_eye = view_setting->eye.cast<float>();
   viewer.core.camera_up = view_setting->up.cast<float>();
   viewer.core.orthographic = view_setting->orthographic;
@@ -60,16 +60,16 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 
 // This callback will run until all view_settinged views have been rendered.
 bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-                    const ViewSetting *view_setting) {
+		    const ViewSetting *view_setting) {
   // Allocate temporary buffers.
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(window_width,
-                                                                 window_height);
+								 window_height);
 
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
@@ -82,10 +82,10 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 // Here, the viewer is launched and the views are rendered.
 void RunViewer(Mesh &mesh, const ViewSetting *view_setting) {
   // Plot the mesh.
-  igl::viewer::Viewer viewer;                       // Create a viewer.
+  igl::viewer::Viewer viewer;			    // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   LOG(DEBUG) << "RunViewer: #mesh.colors = " << mesh.colors.rows()
-             << " #mesh.vertices = " << mesh.vertices.rows() << "\n";
+	     << " #mesh.vertices = " << mesh.vertices.rows() << "\n";
   if (mesh.colors.rows() > 0 && mesh.colors.rows() == mesh.vertices.rows()) {
     viewer.data.set_colors(mesh.colors);
   }
@@ -94,10 +94,10 @@ void RunViewer(Mesh &mesh, const ViewSetting *view_setting) {
       std::bind(ViewerInit, std::placeholders::_1, view_setting);
   viewer.callback_pre_draw =
       std::bind(ViewerPreDraw, std::placeholders::_1, &mesh,
-                view_setting);  // Bind callback.
+		view_setting);  // Bind callback.
   viewer.callback_post_draw =
       std::bind(ViewerPostDraw, std::placeholders::_1, &mesh,
-                view_setting);  // Bind callback.
+		view_setting);  // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -110,6 +110,27 @@ int main(int argc, char *argv[]) {
   // Get the file path to load (supports .OFF right now).
   std::string model_path(argv[++argv_index]);
 
+  bool use_decimate = false;
+  bool use_gaussian = false;
+  bool display_spectrum = false;
+  bool display_saliency = false;
+  bool display_eigenvector = false;
+
+  for (argv_index = 2; argv_index < argc; ++argv_index) {
+    std::string option(argv[argv_index]);
+    LOG(DEBUG) << "option = " << option << "\n";
+    if (option == "decimate")
+      use_decimate = true;
+    else if (option == "smooth")
+      use_gaussian = true;
+    else if (option == "spectrum")
+      display_spectrum = true;
+    else if (option == "saliency")
+      display_saliency = true;
+    else if (option == "eigenvector")
+      display_eigenvector = true;
+  }
+
   // Make a mesh struct.
   Mesh mesh;
   mesh.path = model_path;
@@ -118,58 +139,48 @@ int main(int argc, char *argv[]) {
 
   // Load a triangular mesh format.
   igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
-                          mesh.basename, mesh.extension, mesh.filename);
+			  mesh.basename, mesh.extension, mesh.filename);
 
-  // Decimate.
-  int max_faces = 1000;
-  Eigen::VectorXi birth_face_indices;
-  Eigen::VectorXi birth_vertex_indices;
-  Mesh decimated_mesh;
-  decimated_mesh.faces.resize(max_faces, 3);
-  decimated_mesh.vertices.resize(mesh.vertices.rows(), 3);
-  birth_face_indices.resize(max_faces);
-  birth_vertex_indices.resize(mesh.vertices.rows());
+  if (use_decimate) {
+    // Decimate.
+    int max_faces = 1000;
+    Eigen::VectorXi birth_face_indices;
+    Eigen::VectorXi birth_vertex_indices;
+    Mesh decimated_mesh;
+    decimated_mesh.faces.resize(max_faces, 3);
+    decimated_mesh.vertices.resize(mesh.vertices.rows(), 3);
+    birth_face_indices.resize(max_faces);
+    birth_vertex_indices.resize(mesh.vertices.rows());
 
-  igl::qslim(mesh.vertices, mesh.faces, max_faces, decimated_mesh.vertices,
-             decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
-  mesh.vertices = decimated_mesh.vertices;
-  mesh.faces = decimated_mesh.faces;
+    igl::qslim(mesh.vertices, mesh.faces, max_faces, decimated_mesh.vertices,
+	       decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
+    mesh.vertices = decimated_mesh.vertices;
+    mesh.faces = decimated_mesh.faces;
+  }
 
   PclPointCloud::Ptr input_cloud(new PclPointCloud());
-
   // Populate the point cloud.
   for (int i = 0; i < mesh.vertices.rows(); ++i)
     input_cloud->push_back(EigenToPclPoint(mesh.vertices.row(i)));
-
   PclKdtree::Ptr tree(new PclKdtree());
   tree->setInputCloud(input_cloud);
 
-  // Smooth.
-  Eigen::MatrixXd smoothed_vertices(mesh.vertices.rows(), mesh.vertices.cols());
-  double sigma =
-      0.02 *
-      (mesh.vertices.colwise().maxCoeff() - mesh.vertices.colwise().minCoeff())
-          .norm();
-  for (int i = 0; i < mesh.vertices.rows(); ++i) {
-    Eigen::VectorXd result;
-    ComputeGaussianPoint(mesh, i, tree, sigma, &result);
-    smoothed_vertices.row(i) = result;
+  if (use_gaussian) {
+    // Smooth.
+    Eigen::MatrixXd smoothed_vertices(mesh.vertices.rows(),
+				      mesh.vertices.cols());
+    double sigma = 0.002 *
+		   (mesh.vertices.colwise().maxCoeff() -
+		    mesh.vertices.colwise().minCoeff())
+		       .norm();
+    double scale = 5.0 * sigma * sigma;
+    for (int i = 0; i < mesh.vertices.rows(); ++i) {
+      Eigen::VectorXd result;
+      ComputeGaussianPoint(mesh, i, tree, scale, 2.5 * sqrt(scale), &result);
+      smoothed_vertices.row(i) = result;
+    }
+    mesh.vertices = smoothed_vertices;
   }
-  int ccw = 0, not_ccw = 0;
-  for (int i = 0; i < mesh.faces.rows(); ++i) {
-    Eigen::VectorXi face = mesh.faces.row(i);
-    Eigen::Vector3d vi = mesh.vertices.row(face(0));
-    Eigen::Vector3d vj = mesh.vertices.row(face(1));
-    Eigen::Vector3d vk = mesh.vertices.row(face(2));
-    Eigen::Vector3d normal = (vj - vi).cross(vk - vi);
-    if (IsCCW(vi, vj, vk))
-      ++ccw;
-    else
-      ++not_ccw;
-  }
-  LOG(DEBUG) << "Encountered " << ccw << " CCW faces and " << not_ccw
-             << " non-CCW faces.\n";
-  mesh.vertices = smoothed_vertices;
 
   // Get the minimum and maximum extents.
   mesh.bounds.lo = mesh.vertices.colwise().minCoeff();
@@ -177,16 +188,52 @@ int main(int argc, char *argv[]) {
   Eigen::Vector3d center = 0.5 * (mesh.bounds.hi + mesh.bounds.lo);
   double extent = (mesh.bounds.hi - mesh.bounds.lo).norm();
 
+  if (display_spectrum) {
+    Eigen::VectorXd spectrum(mesh.vertices.rows());
+    Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
+    ComputeLogLaplacianSpectrum(mesh.vertices, mesh.faces, solver, spectrum);
+    mesh.colors.resize(mesh.vertices.rows(), 3);
+    double min_spectrum = spectrum.minCoeff();
+    double max_spectrum = spectrum.maxCoeff();
+    double avg_spectrum = spectrum.mean();
+    LOG(DEBUG) << "min_spectrum = " << min_spectrum
+	       << " max_spectrum = " << max_spectrum
+	       << " avg_spectrum = " << avg_spectrum << "\n";
+    igl::jet(spectrum, spectrum.minCoeff(), spectrum.maxCoeff(), mesh.colors);
+  } else if (display_saliency) {
+    Eigen::VectorXd saliency(mesh.vertices.rows());
+    ComputeMeshSaliency(mesh.vertices, mesh.faces, saliency);
+    mesh.colors.resize(mesh.vertices.rows(), 3);
+    double min_saliency = saliency.minCoeff();
+    double max_saliency = saliency.maxCoeff();
+    igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
+  } else if (display_eigenvector) {
+    Eigen::VectorXd spectrum(mesh.vertices.rows());
+    Eigen::VectorXd eigenvector(mesh.vertices.rows());
+    Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
+    ComputeLogLaplacianSpectrum(mesh.vertices, mesh.faces, solver, spectrum);
+    mesh.colors.resize(mesh.vertices.rows(), 3);
+		eigenvector = solver.eigenvectors().col(0);
+    double min_eigenvector = eigenvector.minCoeff();
+    double max_eigenvector = eigenvector.maxCoeff();
+    double avg_eigenvector = eigenvector.mean();
+    LOG(DEBUG) << std::setprecision(16) <<"min_eigenvector = " << min_eigenvector
+	       << " max_eigenvector = " << max_eigenvector
+	       << " avg_eigenvector = " << avg_eigenvector << "\n";
+    igl::jet(eigenvector, eigenvector.minCoeff(), eigenvector.maxCoeff(),
+	     mesh.colors);
+  }
+
   LOG(DEBUG) << "Compute stats: bounds.min = " << mesh.bounds.lo
-             << " bounds.max = " << mesh.bounds.hi << " extent = " << extent
-             << "\n";
+	     << " bounds.max = " << mesh.bounds.hi << " extent = " << extent
+	     << "\n";
 
   LOG(DEBUG) << "Normalize mesh.\n";
 
   ViewSetting view_setting =
       ViewSetting(window_width, window_height, Eigen::Vector3d(0.0, 0.0, 3.0),
-                  Eigen::Vector3d(0.0, 1.0, 0.0), false, 0.0001, 100, 45.0,
-                  Eigen::Vector3d(0.0, 0.0, 0.0));
+		  Eigen::Vector3d(0.0, 1.0, 0.0), false, 0.0001, 100, 45.0,
+		  Eigen::Vector3d(0.0, 0.0, 0.0));
   RunViewer(mesh, &view_setting);
   return 0;
 }

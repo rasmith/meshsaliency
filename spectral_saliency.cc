@@ -35,6 +35,27 @@ int window_height = 256;
 
 std::string input_directory;
 
+double interpolate(double val, double y0, double x0, double y1, double x1) {
+  return (val - x0) * (y1 - y0) / (x1 - x0) + y0;
+}
+
+double base(double val) {
+  if (val <= -0.75)
+    return 0;
+  else if (val <= -0.25)
+    return interpolate(val, 0.0, -0.75, 1.0, -0.25);
+  else if (val <= 0.25)
+    return 1.0;
+  else if (val <= 0.75)
+    return interpolate(val, 1.0, 0.25, 0.0, 0.75);
+  else
+    return 0.0;
+}
+
+double red(double gray) { return base((2.0 * gray - 1.0) - 0.5); }
+double green(double gray) { return base(2.0 * gray - 1.0); }
+double blue(double gray) { return base((2.0 * gray - 1.0) + 0.5); }
+
 // This is the Viewer initialization callback.
 bool ViewerInit(igl::viewer::Viewer &viewer, const ViewSetting *view_setting) {
   window_width = view_setting->width;
@@ -47,7 +68,7 @@ bool ViewerInit(igl::viewer::Viewer &viewer, const ViewSetting *view_setting) {
 
 // This is a pre render callback for the Viewr class.
 bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-                   const ViewSetting *view_setting) {
+		   const ViewSetting *view_setting) {
   viewer.core.camera_eye = view_setting->eye.cast<float>();
   viewer.core.camera_up = view_setting->up.cast<float>();
   viewer.core.orthographic = view_setting->orthographic;
@@ -60,16 +81,16 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 
 // This callback will run until all view_settinged views have been rendered.
 bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-                    const ViewSetting *view_setting) {
+		    const ViewSetting *view_setting) {
   // Allocate temporary buffers.
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(window_width,
-                                                                 window_height);
+								 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(window_width,
-                                                                 window_height);
+								 window_height);
 
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
@@ -82,10 +103,10 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 // Here, the viewer is launched and the views are rendered.
 void RunViewer(Mesh &mesh, const ViewSetting *view_setting) {
   // Plot the mesh.
-  igl::viewer::Viewer viewer;                       // Create a viewer.
+  igl::viewer::Viewer viewer;			    // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   LOG(DEBUG) << "RunViewer: #mesh.colors = " << mesh.colors.rows()
-             << " #mesh.vertices = " << mesh.vertices.rows() << "\n";
+	     << " #mesh.vertices = " << mesh.vertices.rows() << "\n";
   if (mesh.colors.rows() > 0 && mesh.colors.rows() == mesh.vertices.rows()) {
     viewer.data.set_colors(mesh.colors);
   }
@@ -94,10 +115,10 @@ void RunViewer(Mesh &mesh, const ViewSetting *view_setting) {
       std::bind(ViewerInit, std::placeholders::_1, view_setting);
   viewer.callback_pre_draw =
       std::bind(ViewerPreDraw, std::placeholders::_1, &mesh,
-                view_setting);  // Bind callback.
+		view_setting);  // Bind callback.
   viewer.callback_post_draw =
       std::bind(ViewerPostDraw, std::placeholders::_1, &mesh,
-                view_setting);  // Bind callback.
+		view_setting);  // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -118,7 +139,7 @@ int main(int argc, char *argv[]) {
 
   // Load a triangular mesh format.
   igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
-                          mesh.basename, mesh.extension, mesh.filename);
+			  mesh.basename, mesh.extension, mesh.filename);
 
   // Get the minimum and maximum extents.
   mesh.bounds.lo = mesh.vertices.colwise().minCoeff();
@@ -127,21 +148,22 @@ int main(int argc, char *argv[]) {
   double extent = (mesh.bounds.hi - mesh.bounds.lo).norm();
 
   LOG(DEBUG) << "Compute stats: bounds.min = " << mesh.bounds.lo
-             << " bounds.max = " << mesh.bounds.hi << " extent = " << extent
-             << "\n";
+	     << " bounds.max = " << mesh.bounds.hi << " extent = " << extent
+	     << "\n";
 
   // Compute the saliency.
   int max_vertices = 1000;
   int num_scales = 5;
-  double scale_base = 0.02 * extent;
+  double scale_base = 0.002 * extent;
   scale_base *= scale_base;
+  LOG(DEBUG) << "scale_base = " << scale_base << "\n";
   double scales[5] = {1.0 * scale_base, 2.0 * scale_base, 3.0 * scale_base,
-                      4.0 * scale_base, 5.0 * scale_base};
+		      4.0 * scale_base, 5.0 * scale_base};
   Eigen::VectorXd saliency(mesh.vertices.rows());
 
-  LOG(DEBUG) << "Compute saliency.\n";
   ComputeMultiScaleSaliency(mesh, max_vertices, scales, num_scales, saliency);
   LOG(DEBUG) << "Compute jet colors.\n";
+   mesh.colors.resize(mesh.vertices.rows(), 3);
   igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
   LOG(DEBUG) << "#mesh.colors() = " << mesh.colors.rows() << "\n";
 
@@ -158,8 +180,8 @@ int main(int argc, char *argv[]) {
 
   ViewSetting view_setting =
       ViewSetting(window_width, window_height, Eigen::Vector3d(0.0, 0.0, 3.0),
-                  Eigen::Vector3d(0.0, 1.0, 0.0), false, 0.0001, 100, 45.0,
-                  Eigen::Vector3d(0.0, 0.0, 0.0));
+		  Eigen::Vector3d(0.0, 1.0, 0.0), false, 0.0001, 100, 45.0,
+		  Eigen::Vector3d(0.0, 0.0, 0.0));
   RunViewer(mesh, &view_setting);
   return 0;
 }

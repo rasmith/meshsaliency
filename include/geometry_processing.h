@@ -17,24 +17,29 @@ Eigen::Vector3d PclPointToEigen(const PclPoint &point);
 PclPoint EigenToPclPoint(const Eigen::Vector3d &point);
 
 bool IsCCW(const Eigen::Vector3d &a, const Eigen::Vector3d &b,
-           const Eigen::Vector3d &c);
+	   const Eigen::Vector3d &c);
 
 double ComputeAveragePairwiseDistance(const Eigen::MatrixXd &vertices);
 
-float ComputeGaussian(float x, float sigma);
+double ComputeGaussian(double x, double sigma);
 
 void ComputeGaussianPoint(const geometry::Mesh &mesh, int i,
-                          PclKdtree::Ptr tree, double sigma,
-                          Eigen::VectorXd *output);
+			  PclKdtree::Ptr tree, double scale, double threshold,
+			  Eigen::VectorXd *output);
+
+void ComputeLogLaplacianSpectrum(
+    const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,
+    Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> &solver,
+    Eigen::VectorXd &log_laplacian_spectrum);
 
 void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
-                              const Eigen::MatrixXi &indices,
-                              Eigen::SparseMatrix<double> &weighted_adjacency);
+			      const Eigen::MatrixXi &indices,
+			      Eigen::SparseMatrix<double> &weighted_adjacency);
 
 void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
-                         const Eigen::MatrixXi &indices,
-                         Eigen::VectorXd &saliency);
+			 const Eigen::MatrixXi &indices,
+			 Eigen::VectorXd &saliency);
 
 void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
-                               const double *scales, int num_scales,
-                               Eigen::VectorXd &saliency);
+			       const double *scales, int num_scales,
+			       Eigen::VectorXd &saliency);
