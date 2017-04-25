@@ -182,16 +182,46 @@ void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
       [](const double &, const double &b) -> double { return b; });
 }
 
+void ComputeDegreeMatrix(const Eigen::MatrixXd &vertices,
+			 const Eigen::MatrixXi &indices,
+			 Eigen::SparseMatrix<double>& degrees) {
+  degrees.resize(vertices.rows(), vertices.rows());
+  degrees.setZero();
+  std::vector<Eigen::Triplet<double>> triples;
+  for (int i = 0; i < indices.rows(); ++i) {
+    int fi = indices.row(i)(0);
+    int fj = indices.row(i)(1);
+    int fk = indices.row(i)(2);
+    triples.push_back(Eigen::Triplet<double>(fi, fi, 1.0));
+    triples.push_back(Eigen::Triplet<double>(fj, fj, 1.0));
+    triples.push_back(Eigen::Triplet<double>(fk, fk, 1.0));
+  }
+  degrees.setFromTriplets(triples.begin(), triples.end());
+}
+
 void ComputeLogLaplacianSpectrum(
     const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> &solver,
     Eigen::VectorXd &log_laplacian_spectrum) {
   // Compute the cotangent matrix.
-  Eigen::SparseMatrix<double> cotmatrix(vertices.rows(), vertices.rows());
+  //  Eigen::SparseMatrix<double> cotmatrix(vertices.rows(), vertices.rows());
   // Get the eigenvalues of this matrix.
-  igl::cotmatrix(vertices, indices, cotmatrix);
+  // igl::cotmatrix(vertices, indices, cotmatrix);
   // Solve.
-  solver.compute(-cotmatrix);
+
+  LOG(DEBUG) << "Compute weighted_adjacency\n";
+  Eigen::SparseMatrix<double> weighted_adjacency;
+  ComputeWeightedAdjacency(vertices, indices, weighted_adjacency);
+  for (int i = 0; i < vertices.rows();++i)
+    weighted_adjacency.row(i) /= weighted_adjacency.row(i).sum();
+  LOG(DEBUG) << "Compute degrees\n";
+  Eigen::SparseMatrix<double> degrees;
+  ComputeDegreeMatrix(vertices, indices, degrees);
+  Eigen::SparseMatrix<double> laplacian = weighted_adjacency - degrees;
+
+  LOG(DEBUG) << "Compute spectrum\n";
+	solver.compute(laplacian);
+  //  solver.compute(-cotmatrix);
   Eigen::VectorXd eigenvalues = solver.eigenvalues();
   log_laplacian_spectrum = eigenvalues.unaryExpr(
       [](double x) -> double { return std::log(std::abs(x)); });
@@ -201,7 +231,6 @@ void ComputeMeshIrregularity(
     const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> &solver,
     Eigen::VectorXd &irregularity) {
-  Eigen::SparseMatrix<double> cotmatrix(vertices.rows(), vertices.rows());
   Eigen::VectorXd log_laplacian_spectrum(vertices.rows());
   ComputeLogLaplacianSpectrum(vertices, indices, solver,
 			      log_laplacian_spectrum);
@@ -237,7 +266,7 @@ void ComputeMeshSaliencyMatrix(const Eigen::MatrixXd &vertices,
   ComputeWeightedAdjacency(vertices, indices, weighted_adjacency);
   // Normalize.
   for (int i = 0; i < vertices.rows(); ++i)
-    weighted_adjacency.row(i) /= weighted_adjacency.row(i).norm();
+    weighted_adjacency.row(i) /= weighted_adjacency.row(i).sum();
   // Compute the saliency S = B*R*B^T * W.
   Eigen::MatrixXd lhs = solver.eigenvectors() * r_diagonal.asDiagonal() *
 			solver.eigenvectors().transpose();
@@ -267,6 +296,7 @@ void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
   birth_face_indices.resize(max_faces);
   birth_vertex_indices.resize(mesh.vertices.rows());
 
+  LOG(DEBUG) << "ComputeMultiScaleSaliency: running qslim.\n ";
   igl::qslim(mesh.vertices, mesh.faces, max_faces, decimated_mesh.vertices,
 	     decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
   LOG(DEBUG) << "ComputeMultiScaleSaliency: decimate #v = "
@@ -288,8 +318,6 @@ void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
 	    .unaryExpr([](const double &x) -> double { return 1.0; })
 	    .sum());
   }
-  for (int i = 0; i < 10; ++i)
-    LOG(DEBUG) << "degree(" << i << ")=" << degrees(i) << "\n";
 
   // Compute k(i) for each vertex in the decimated mesh.
   Eigen::VectorXi scale_factors(decimated_mesh.vertices.rows());
@@ -300,8 +328,6 @@ void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
 	    .sum();
     scale_factors(i) =
 	static_cast<double>(degrees(i)) * average_pairwise / denominator + 1;
-    if (i < 10)
-      LOG(DEBUG) << "scale_factors(" << i << ")=" << scale_factors(i) << "\n";
   }
 
   // Used to compute nearest point.

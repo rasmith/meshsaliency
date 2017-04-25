@@ -12,7 +12,6 @@
 
 #define IGL_VIEWER_VIEWER_QUIET
 
-#include <igl/cotmatrix.h>
 #include <igl/jet.h>
 #include <igl/look_at.h>
 #include <igl/png/writePNG.h>
@@ -220,7 +219,7 @@ int main(int argc, char *argv[]) {
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
     ComputeLogLaplacianSpectrum(mesh.vertices, mesh.faces, solver, spectrum);
     mesh.colors.resize(mesh.vertices.rows(), 3);
-    eigenvector = solver.eigenvectors().col(0);
+    eigenvector = solver.eigenvectors().col(2);
     double min_eigenvector = eigenvector.minCoeff();
     double max_eigenvector = eigenvector.maxCoeff();
     double avg_eigenvector = eigenvector.mean();
