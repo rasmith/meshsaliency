@@ -5,9 +5,9 @@
 
 #include <cmath>
 #include <iostream>
+#include <unordered_map>
 
 #include <igl/AABB.h>
-#include <igl/barycentric_coordinates.h>
 #include <igl/cotmatrix.h>
 #include <igl/qslim.h>
 #include <igl/viewer/Viewer.h>
@@ -16,7 +16,7 @@
 #include <pcl/point_types.h>
 
 bool IsCCW(const Eigen::Vector3d &a, const Eigen::Vector3d &b,
-	   const Eigen::Vector3d &c) {
+           const Eigen::Vector3d &c) {
   return (b(0) - a(0)) * (c(1) - a(1)) - (b(1) - a(1)) * (c(0) - a(0));
 }
 
@@ -46,17 +46,17 @@ double ComputeGaussian(double x, double scale) {
 }
 
 void ComputeSmoothedSaliencyValue(const geometry::Mesh &mesh,
-				  const Eigen::VectorXd &saliency, int i,
-				  PclKdtree::Ptr tree, double scale,
-				  double *output) {
+                                  const Eigen::VectorXd &saliency, int i,
+                                  PclKdtree::Ptr tree, double scale,
+                                  double *output) {
   double result = 0.0;
   std::vector<int> neighbor_indices;
   std::vector<float> neighbor_distances;
   Eigen::VectorXd query = mesh.vertices.row(i);
   PclPoint input_point = EigenToPclPoint(query);
   if (pcl::isFinite(input_point) &&
-      tree->radiusSearch(input_point, 2.0 * scale, neighbor_indices,
-			 neighbor_distances)) {
+      tree->radiusSearch(input_point, 2.5 * sqrt(scale), neighbor_indices,
+                         neighbor_distances)) {
     double total_weight = 0.0;
     for (int k = 0; k < neighbor_indices.size(); ++k) {
       Eigen::VectorXd neighbor = mesh.vertices.row(neighbor_indices[k]);
@@ -65,6 +65,10 @@ void ComputeSmoothedSaliencyValue(const geometry::Mesh &mesh,
       result += weight * saliency(neighbor_indices[k]);
       total_weight += weight;
     }
+    // NOTE: PCL will omit the query point if found in results.
+    double weight = ComputeGaussian(0.0, scale);
+    total_weight += weight;
+    result += weight * saliency(i);
     result /= total_weight;
     *output = result;
   } else {
@@ -73,8 +77,8 @@ void ComputeSmoothedSaliencyValue(const geometry::Mesh &mesh,
 }
 
 void ComputeGaussianPoint(const geometry::Mesh &mesh, int i,
-			  PclKdtree::Ptr tree, double scale, double threshold,
-			  Eigen::VectorXd *output) {
+                          PclKdtree::Ptr tree, double scale, double threshold,
+                          Eigen::VectorXd *output) {
   Eigen::Vector3d result;
   result.setZero();
   std::vector<int> neighbor_indices;
@@ -83,7 +87,7 @@ void ComputeGaussianPoint(const geometry::Mesh &mesh, int i,
   PclPoint input_point = EigenToPclPoint(query);
   if (pcl::isFinite(input_point) &&
       tree->radiusSearch(input_point, threshold, neighbor_indices,
-			 neighbor_distances)) {
+                         neighbor_distances)) {
     double total_weight = 0.0;
     for (int k = 0; k < neighbor_indices.size(); ++k) {
       Eigen::VectorXd neighbor = mesh.vertices.row(neighbor_indices[k]);
@@ -92,6 +96,11 @@ void ComputeGaussianPoint(const geometry::Mesh &mesh, int i,
       result += weight * mesh.vertices.row(neighbor_indices[k]);
       total_weight += weight;
     }
+    // NOTE: PCL will omit the query point, if it is found in the search
+    // results.
+    double weight = ComputeGaussian(0.0, scale);
+    result += weight * query;
+    total_weight += weight;
     result /= total_weight;
     *output = result;
   } else {
@@ -100,7 +109,7 @@ void ComputeGaussianPoint(const geometry::Mesh &mesh, int i,
 }
 
 void ComputeGaussianMesh(const geometry::Mesh &mesh, const PclKdtree::Ptr &tree,
-			 double scale, Eigen::MatrixXd &smoothed_vertices) {
+                         double scale, Eigen::MatrixXd &smoothed_vertices) {
   smoothed_vertices.resize(mesh.vertices.rows(), mesh.vertices.cols());
   for (int i = 0; i < mesh.vertices.rows(); ++i) {
     double threshold = 2.5 * sqrt(scale);
@@ -111,9 +120,9 @@ void ComputeGaussianMesh(const geometry::Mesh &mesh, const PclKdtree::Ptr &tree,
 }
 
 void ComputeDynamicGaussianMesh(const geometry::Mesh &mesh,
-				const PclKdtree::Ptr &tree, double scale,
-				const Eigen::VectorXi &scale_factors,
-				Eigen::MatrixXd &smoothed_vertices) {
+                                const PclKdtree::Ptr &tree, double scale,
+                                const Eigen::VectorXi &scale_factors,
+                                Eigen::MatrixXd &smoothed_vertices) {
   smoothed_vertices.resize(mesh.vertices.rows(), mesh.vertices.cols());
   for (int i = 0; i < mesh.vertices.rows(); ++i) {
     double threshold = 2.5 * sqrt(scale_factors(i) * scale);
@@ -123,18 +132,11 @@ void ComputeDynamicGaussianMesh(const geometry::Mesh &mesh,
   }
 }
 
-void ComputePointSaliency(const geometry::Mesh &mesh,
-			  const Eigen::Vector3d &point, int face_index,
-			  const Eigen::VectorXd &saliency,
-			  double &saliency_value) {
-  Eigen::Vector3i face = mesh.faces.row(face_index);
-  int fi = face(0);
-  int fj = face(1);
-  int fk = face(2);
-  Eigen::Vector3d vi = mesh.vertices.row(fi);
-  Eigen::Vector3d vj = mesh.vertices.row(fj);
-  Eigen::Vector3d vk = mesh.vertices.row(fk);
-  Eigen::Vector3d coordinates;
+void ComputeBarycentricCoordinates(const Eigen::Vector3d &point,
+                                   const Eigen::Vector3d &vi,
+                                   const Eigen::Vector3d &vj,
+                                   const Eigen::Vector3d vk,
+                                   Eigen::Vector3d &coordinates) {
   Eigen::Vector3d v0 = vj - vi, v1 = vk - vi, v2 = point - vi;
   double d00 = v0.dot(v0);
   double d01 = v0.dot(v1);
@@ -145,57 +147,122 @@ void ComputePointSaliency(const geometry::Mesh &mesh,
   coordinates(1) = (d11 * d20 - d01 * d21) / denom;
   coordinates(2) = (d00 * d21 - d01 * d20) / denom;
   coordinates(0) = 1.0f - coordinates(1) - coordinates(2);
+}
+
+void ComputePointSaliency(const geometry::Mesh &mesh,
+                          const Eigen::Vector3d &point, int face_index,
+                          const Eigen::VectorXd &saliency,
+                          double &saliency_value) {
+  Eigen::Vector3i face = mesh.faces.row(face_index);
+  int fi = face(0);
+  int fj = face(1);
+  int fk = face(2);
+  Eigen::Vector3d vi = mesh.vertices.row(fi);
+  Eigen::Vector3d vj = mesh.vertices.row(fj);
+  Eigen::Vector3d vk = mesh.vertices.row(fk);
+  Eigen::Vector3d coordinates;
+  // NOTE: Compute barycentric coordinates ourself, since libigl returns
+  // NaNs from its own routine.
+  ComputeBarycentricCoordinates(point, vi, vj, vk, coordinates);
   saliency_value = 0.0;
   saliency_value += coordinates(0) * saliency(fi);
   saliency_value += coordinates(1) * saliency(fj);
   saliency_value += coordinates(2) * saliency(fk);
 }
 
+template <typename T, typename U>
+struct PairHash {
+ public:
+  std::size_t operator()(const std::pair<T, U> &x) const {
+    return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
+  }
+};
+
 void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
-			      const Eigen::MatrixXi &indices,
-			      Eigen::SparseMatrix<double> &weighted_adjacency) {
+                              const Eigen::MatrixXi &indices,
+                              Eigen::SparseMatrix<double> &weighted_adjacency) {
   weighted_adjacency.resize(vertices.rows(), vertices.rows());
   weighted_adjacency.setZero();
   std::vector<Eigen::Triplet<double>> triples;
+  std::unordered_map<std::pair<int, int>, bool, PairHash<int, int>> edges;
   for (int i = 0; i < indices.rows(); ++i) {
-    int fi = indices.row(i)(0);
-    int fj = indices.row(i)(1);
-    int fk = indices.row(i)(2);
-    double fi_fj_norm2 =
-	1.0 / (vertices.row(fi) - vertices.row(fj)).squaredNorm();
-    double fi_fk_norm2 =
-	1.0 / (vertices.row(fi) - vertices.row(fk)).squaredNorm();
-    double fj_fk_norm2 =
-	1.0 / (vertices.row(fj) - vertices.row(fk)).squaredNorm();
-    triples.push_back(Eigen::Triplet<double>(fi, fj, fi_fj_norm2));
-    triples.push_back(Eigen::Triplet<double>(fj, fi, fi_fj_norm2));
-    triples.push_back(Eigen::Triplet<double>(fi, fk, fi_fk_norm2));
-    triples.push_back(Eigen::Triplet<double>(fk, fi, fi_fk_norm2));
-    triples.push_back(Eigen::Triplet<double>(fj, fk, fj_fk_norm2));
-    triples.push_back(Eigen::Triplet<double>(fk, fj, fj_fk_norm2));
+    Eigen::VectorXi face = indices.row(i);
+    int fi = face(0), fj = face(1), fk = face(2);
+    if (edges.find(std::pair<int, int>(fi, fj)) == edges.end() &&
+        edges.find(std::pair<int, int>(fj, fi)) == edges.end()) {
+      double fi_fj_norm2 =
+          1.0 / (vertices.row(fi) - vertices.row(fj)).squaredNorm();
+      edges.emplace(std::pair<int, int>(fi, fj), true);
+      triples.push_back(Eigen::Triplet<double>(fi, fj, fi_fj_norm2));
+      triples.push_back(Eigen::Triplet<double>(fj, fi, fi_fj_norm2));
+    }
+    if (edges.find(std::pair<int, int>(fi, fk)) == edges.end() &&
+        edges.find(std::pair<int, int>(fk, fi)) == edges.end()) {
+      double fi_fk_norm2 =
+          1.0 / (vertices.row(fi) - vertices.row(fk)).squaredNorm();
+      edges.emplace(std::pair<int, int>(fi, fk), true);
+      triples.push_back(Eigen::Triplet<double>(fi, fk, fi_fk_norm2));
+      triples.push_back(Eigen::Triplet<double>(fk, fi, fi_fk_norm2));
+    }
+    if (edges.find(std::pair<int, int>(fj, fk)) == edges.end() &&
+        edges.find(std::pair<int, int>(fk, fj)) == edges.end()) {
+      double fj_fk_norm2 =
+          1.0 / (vertices.row(fj) - vertices.row(fk)).squaredNorm();
+      edges.emplace(std::pair<int, int>(fj, fk), true);
+      triples.push_back(Eigen::Triplet<double>(fj, fk, fj_fk_norm2));
+      triples.push_back(Eigen::Triplet<double>(fk, fj, fj_fk_norm2));
+    }
   }
+
   // Compute the adjacency from triplets.
   // NOTE: a lambda is passed to avoid summing on duplicate, the default
   // behavior in Eigen.
-  weighted_adjacency.setFromTriplets(
-      triples.begin(), triples.end(),
-      [](const double &, const double &b) -> double { return b; });
+  weighted_adjacency.setFromTriplets(triples.begin(), triples.end());
+}
+
+void ComputeDegrees(const Eigen::MatrixXd &vertices,
+                    const Eigen::MatrixXi &indices,
+                    Eigen::VectorXi &vertex_degrees) {
+  std::vector<Eigen::Triplet<double>> triples;
+  std::unordered_map<std::pair<int, int>, bool, PairHash<int, int>> edges;
+  vertex_degrees.setZero();
+  vertex_degrees.resize(vertices.rows());
+  for (int i = 0; i < indices.rows(); ++i) {
+    Eigen::VectorXi face = indices.row(i);
+    int fi = face(0), fj = face(1), fk = face(2);
+    if (edges.find(std::pair<int, int>(fi, fj)) == edges.end() &&
+        edges.find(std::pair<int, int>(fj, fi)) == edges.end()) {
+      edges.emplace(std::pair<int, int>(fi, fj), true);
+      ++vertex_degrees(fi);
+      ++vertex_degrees(fj);
+    }
+    if (edges.find(std::pair<int, int>(fi, fk)) == edges.end() &&
+        edges.find(std::pair<int, int>(fk, fi)) == edges.end()) {
+      edges.emplace(std::pair<int, int>(fi, fk), true);
+      ++vertex_degrees(fi);
+      ++vertex_degrees(fk);
+    }
+    if (edges.find(std::pair<int, int>(fj, fk)) == edges.end() &&
+        edges.find(std::pair<int, int>(fk, fj)) == edges.end()) {
+      edges.emplace(std::pair<int, int>(fj, fk), true);
+      ++vertex_degrees(fj);
+      ++vertex_degrees(fk);
+    }
+  }
 }
 
 void ComputeDegreeMatrix(const Eigen::MatrixXd &vertices,
-			 const Eigen::MatrixXi &indices,
-			 Eigen::SparseMatrix<double>& degrees) {
+                         const Eigen::MatrixXi &indices,
+                         Eigen::SparseMatrix<double> &degrees) {
+  std::vector<Eigen::Triplet<double>> triples;
+  Eigen::VectorXi vertex_degrees(vertices.rows());
+  ComputeDegrees(vertices, indices, vertex_degrees);
+  for (int i = 0; i < vertices.rows(); ++i) {
+    triples.push_back(Eigen::Triplet<double>(i, i, vertex_degrees(i)));
+    // LOG(DEBUG) << "degree("<<i<<")=" << vertex_degrees(i) << "\n";
+  }
   degrees.resize(vertices.rows(), vertices.rows());
   degrees.setZero();
-  std::vector<Eigen::Triplet<double>> triples;
-  for (int i = 0; i < indices.rows(); ++i) {
-    int fi = indices.row(i)(0);
-    int fj = indices.row(i)(1);
-    int fk = indices.row(i)(2);
-    triples.push_back(Eigen::Triplet<double>(fi, fi, 1.0));
-    triples.push_back(Eigen::Triplet<double>(fj, fj, 1.0));
-    triples.push_back(Eigen::Triplet<double>(fk, fk, 1.0));
-  }
   degrees.setFromTriplets(triples.begin(), triples.end());
 }
 
@@ -203,26 +270,22 @@ void ComputeLogLaplacianSpectrum(
     const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> &solver,
     Eigen::VectorXd &log_laplacian_spectrum) {
-  // Compute the cotangent matrix.
-  //  Eigen::SparseMatrix<double> cotmatrix(vertices.rows(), vertices.rows());
-  // Get the eigenvalues of this matrix.
-  // igl::cotmatrix(vertices, indices, cotmatrix);
-  // Solve.
-
-  LOG(DEBUG) << "Compute weighted_adjacency\n";
+  // NOTE: Need to compute Laplacian ourself since libigl is not computing the
+  // variant we need.
   Eigen::SparseMatrix<double> weighted_adjacency;
   ComputeWeightedAdjacency(vertices, indices, weighted_adjacency);
-  for (int i = 0; i < vertices.rows();++i)
-    weighted_adjacency.row(i) /= weighted_adjacency.row(i).sum();
-  LOG(DEBUG) << "Compute degrees\n";
+   for (int i = 0; i < vertices.rows(); ++i) {
+   double sum = weighted_adjacency.row(i).sum();
+   weighted_adjacency.row(i) /= sum;
+  }
+
   Eigen::SparseMatrix<double> degrees;
   ComputeDegreeMatrix(vertices, indices, degrees);
   Eigen::SparseMatrix<double> laplacian = weighted_adjacency - degrees;
 
-  LOG(DEBUG) << "Compute spectrum\n";
-	solver.compute(laplacian);
-  //  solver.compute(-cotmatrix);
+  solver.compute(laplacian);
   Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  LOG(DEBUG) << "Smallest eigenvalue = " << eigenvalues(0) << "\n";
   log_laplacian_spectrum = eigenvalues.unaryExpr(
       [](double x) -> double { return std::log(std::abs(x)); });
 }
@@ -233,7 +296,7 @@ void ComputeMeshIrregularity(
     Eigen::VectorXd &irregularity) {
   Eigen::VectorXd log_laplacian_spectrum(vertices.rows());
   ComputeLogLaplacianSpectrum(vertices, indices, solver,
-			      log_laplacian_spectrum);
+                              log_laplacian_spectrum);
   // Get average response A.
   Eigen::VectorXd average(vertices.rows());
   int filter_size = 9;
@@ -242,8 +305,8 @@ void ComputeMeshIrregularity(
     for (int j = -filter_size / 2; j <= filter_size / 2; ++j) {
       int index = i + j;
       average(i) +=
-	  (index >= 0 && index < vertices.rows() ? log_laplacian_spectrum(index)
-						 : log_laplacian_spectrum(i));
+          (index >= 0 && index < vertices.rows() ? log_laplacian_spectrum(index)
+                                                 : log_laplacian_spectrum(i));
     }
   }
   average /= static_cast<double>(filter_size);
@@ -252,8 +315,8 @@ void ComputeMeshIrregularity(
 }
 
 void ComputeMeshSaliencyMatrix(const Eigen::MatrixXd &vertices,
-			       const Eigen::MatrixXi &indices,
-			       Eigen::MatrixXd &saliency) {
+                               const Eigen::MatrixXi &indices,
+                               Eigen::MatrixXd &saliency) {
   Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
   Eigen::VectorXd irregularity(vertices.rows());
   ComputeMeshIrregularity(vertices, indices, solver, irregularity);
@@ -265,25 +328,27 @@ void ComputeMeshSaliencyMatrix(const Eigen::MatrixXd &vertices,
   Eigen::SparseMatrix<double> weighted_adjacency;
   ComputeWeightedAdjacency(vertices, indices, weighted_adjacency);
   // Normalize.
-  for (int i = 0; i < vertices.rows(); ++i)
-    weighted_adjacency.row(i) /= weighted_adjacency.row(i).sum();
+   for (int i = 0; i < vertices.rows(); ++i) {
+   double sum = weighted_adjacency.row(i).sum();
+   weighted_adjacency.row(i) /= sum;
+  }
   // Compute the saliency S = B*R*B^T * W.
   Eigen::MatrixXd lhs = solver.eigenvectors() * r_diagonal.asDiagonal() *
-			solver.eigenvectors().transpose();
+                        solver.eigenvectors().transpose();
   saliency = (lhs * weighted_adjacency);
 }
 
 void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
-			 const Eigen::MatrixXi &indices,
-			 Eigen::VectorXd &saliency) {
+                         const Eigen::MatrixXi &indices,
+                         Eigen::VectorXd &saliency) {
   Eigen::MatrixXd saliency_matrix(vertices.rows(), vertices.rows());
   ComputeMeshSaliencyMatrix(vertices, indices, saliency_matrix);
   saliency = saliency_matrix.rowwise().sum();
 }
 
 void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
-			       const double *scales, int num_scales,
-			       Eigen::VectorXd &saliency) {
+                               const double *scales, int num_scales,
+                               Eigen::VectorXd &saliency) {
   saliency.resize(mesh.vertices.rows());
   saliency.setZero();
 
@@ -298,10 +363,10 @@ void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
 
   LOG(DEBUG) << "ComputeMultiScaleSaliency: running qslim.\n ";
   igl::qslim(mesh.vertices, mesh.faces, max_faces, decimated_mesh.vertices,
-	     decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
+             decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
   LOG(DEBUG) << "ComputeMultiScaleSaliency: decimate #v = "
-	     << decimated_mesh.vertices.rows()
-	     << " #f = " << decimated_mesh.faces.rows() << ".\n";
+             << decimated_mesh.vertices.rows()
+             << " #f = " << decimated_mesh.faces.rows() << ".\n";
 
   // Compute average pairwise distance.
   double average_pairwise =
@@ -310,24 +375,19 @@ void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
   // Compute weighted adjacency and degree info.
   Eigen::SparseMatrix<double> weighted_adjacency;
   ComputeWeightedAdjacency(decimated_mesh.vertices, decimated_mesh.faces,
-			   weighted_adjacency);
+                           weighted_adjacency);
   Eigen::VectorXi degrees(decimated_mesh.vertices.rows());
-  for (int i = 0; i < weighted_adjacency.rows(); ++i) {
-    degrees(i) = static_cast<int>(
-	weighted_adjacency.row(i)
-	    .unaryExpr([](const double &x) -> double { return 1.0; })
-	    .sum());
-  }
+  ComputeDegrees(decimated_mesh.vertices, decimated_mesh.faces, degrees);
 
   // Compute k(i) for each vertex in the decimated mesh.
   Eigen::VectorXi scale_factors(decimated_mesh.vertices.rows());
   for (int i = 0; i < decimated_mesh.vertices.rows(); ++i) {
-    double denominator =
-	weighted_adjacency.row(i)
-	    .unaryExpr([](const double &x) -> double { return 1.0 / sqrt(x); })
-	    .sum();
+    double denominator = 0.0;
+    weighted_adjacency.row(i)
+        .unaryExpr([](const double &x) -> double { return 1.0 / sqrt(x); })
+        .sum();
     scale_factors(i) =
-	static_cast<double>(degrees(i)) * average_pairwise / denominator + 1;
+        static_cast<double>(degrees(i)) * average_pairwise / denominator + 1;
   }
 
   // Used to compute nearest point.
@@ -355,7 +415,7 @@ void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
     double sigma = scales[j];
     ComputeGaussianMesh(decimated_mesh, tree, sigma, vertices1);
     ComputeDynamicGaussianMesh(decimated_mesh, tree, sigma, scale_factors,
-			       vertices2);
+                               vertices2);
 
     // Compute the saliency S(i, t).
     Eigen::VectorXd saliency1(vertices1.rows());
@@ -364,17 +424,17 @@ void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
     // Compute the saliency S(i, k(i) * t).
     Eigen::VectorXd saliency2(vertices2.rows());
     ComputeMeshSaliency(vertices2, decimated_mesh.faces, saliency2);
-    for (int j = 0; j < 10; ++j) {
-      LOG(DEBUG) << "vertices1(" << j << ")=" << vertices1(j) << "\n";
-      LOG(DEBUG) << "vertices2(" << j << ")=" << vertices2(j) << "\n";
-    }
+    // for (int j = 0; j < 10; ++j) {
+    // LOG(DEBUG) << "vertices1(" << j << ")=" << vertices1(j) << "\n";
+    // LOG(DEBUG) << "vertices2(" << j << ")=" << vertices2(j) << "\n";
+    //}
 
     // Compute S'(i, t) = |S(i, k(i) * t) - S(i, t)|.
     Eigen::VectorXd saliency_t = (saliency2 - saliency1).cwiseAbs();
-    for (int j = 0; j < 10; ++j) {
-      LOG(DEBUG) << "saliency1(" << j << ")=" << saliency1(j) << "\n";
-      LOG(DEBUG) << "saliency2(" << j << ")=" << saliency2(j) << "\n";
-    }
+    // for (int j = 0; j < 10; ++j) {
+    // LOG(DEBUG) << "saliency1(" << j << ")=" << saliency1(j) << "\n";
+    // LOG(DEBUG) << "saliency2(" << j << ")=" << saliency2(j) << "\n";
+    //}
     // for (int j = 0; j < mesh.vertices.rows(); ++j) {
     // LOG(DEBUG) << "saliency1("<<j<<")="<<saliency1(j)<<"\n";
     //}
@@ -388,16 +448,24 @@ void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
       Eigen::RowVector3d point;
       Eigen::RowVector3d query = mesh.vertices.row(j);
       distance = aabb_tree.squared_distance(
-	  decimated_mesh.vertices, decimated_mesh.faces, query, index, point);
+          decimated_mesh.vertices, decimated_mesh.faces, query, index, point);
       double saliency_value = -1.0;
       ComputePointSaliency(decimated_mesh, point, index, saliency_t,
-			   saliency_value);
+                           saliency_value);
       // Sum into the current saliency value from S(v, t) into S'(v).
       saliency(j) += saliency_value;
     }
   }
 
+  // Smooth the saliency values.
+  Eigen::VectorXd smoothed_saliency(mesh.vertices.rows());
+  for (int i = 0; i < smoothed_saliency.rows(); ++i) {
+    double result;
+    ComputeSmoothedSaliencyValue(mesh, saliency, i, tree, scales[0], &result);
+    smoothed_saliency(i) = result;
+  }
+
   // Get saliency S(v) = log S'(v).
   for (int j = 0; j < mesh.vertices.rows(); ++j)
-    saliency(j) = std::log(saliency(j));
+    saliency(j) = std::log(smoothed_saliency(j));
 }

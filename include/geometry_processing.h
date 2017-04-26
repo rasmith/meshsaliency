@@ -23,6 +23,10 @@ double ComputeAveragePairwiseDistance(const Eigen::MatrixXd &vertices);
 
 double ComputeGaussian(double x, double sigma);
 
+void ComputeBarycentricCoordinates(const Eigen::Vector3d& vi,
+	const Eigen::Vector3d& vj, const Eigen::Vector3d vk,
+	Eigen::Vector3d& coordinates);
+
 void ComputeGaussianPoint(const geometry::Mesh &mesh, int i,
 			  PclKdtree::Ptr tree, double scale, double threshold,
 			  Eigen::VectorXd *output);
@@ -35,6 +39,10 @@ void ComputeLogLaplacianSpectrum(
 void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
 			      const Eigen::MatrixXi &indices,
 			      Eigen::SparseMatrix<double> &weighted_adjacency);
+
+void ComputeDegreeMatrix(const Eigen::MatrixXd &vertices,
+			 const Eigen::MatrixXi &indices,
+			 Eigen::SparseMatrix<double>& degrees);
 
 void ComputeMeshIrregularity(
     const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,

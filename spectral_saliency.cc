@@ -35,27 +35,6 @@ int window_height = 256;
 
 std::string input_directory;
 
-double interpolate(double val, double y0, double x0, double y1, double x1) {
-  return (val - x0) * (y1 - y0) / (x1 - x0) + y0;
-}
-
-double base(double val) {
-  if (val <= -0.75)
-    return 0;
-  else if (val <= -0.25)
-    return interpolate(val, 0.0, -0.75, 1.0, -0.25);
-  else if (val <= 0.25)
-    return 1.0;
-  else if (val <= 0.75)
-    return interpolate(val, 1.0, 0.25, 0.0, 0.75);
-  else
-    return 0.0;
-}
-
-double red(double gray) { return base((2.0 * gray - 1.0) - 0.5); }
-double green(double gray) { return base(2.0 * gray - 1.0); }
-double blue(double gray) { return base((2.0 * gray - 1.0) + 0.5); }
-
 // This is the Viewer initialization callback.
 bool ViewerInit(igl::viewer::Viewer &viewer, const ViewSetting *view_setting) {
   window_width = view_setting->width;
@@ -152,7 +131,7 @@ int main(int argc, char *argv[]) {
 	     << "\n";
 
   // Compute the saliency.
-  int max_vertices = 1000;
+  int max_faces = 1000;
   int num_scales = 5;
   double scale_base = 0.002 * extent;
   scale_base *= scale_base;
@@ -161,7 +140,7 @@ int main(int argc, char *argv[]) {
 		      4.0 * scale_base, 5.0 * scale_base};
   Eigen::VectorXd saliency(mesh.vertices.rows());
 
-  ComputeMultiScaleSaliency(mesh, max_vertices, scales, num_scales, saliency);
+  ComputeMultiScaleSaliency(mesh, max_faces, scales, num_scales, saliency);
   LOG(DEBUG) << "Compute jet colors.\n";
    mesh.colors.resize(mesh.vertices.rows(), 3);
   igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
