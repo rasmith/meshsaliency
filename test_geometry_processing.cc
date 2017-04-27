@@ -47,7 +47,7 @@ bool ViewerInit(igl::viewer::Viewer &viewer, const ViewSetting *view_setting) {
 
 // This is a pre render callback for the Viewr class.
 bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-		   const ViewSetting *view_setting) {
+                   const ViewSetting *view_setting) {
   viewer.core.camera_eye = view_setting->eye.cast<float>();
   viewer.core.camera_up = view_setting->up.cast<float>();
   viewer.core.orthographic = view_setting->orthographic;
@@ -60,16 +60,16 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 
 // This callback will run until all view_settinged views have been rendered.
 bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-		    const ViewSetting *view_setting) {
+                    const ViewSetting *view_setting) {
   // Allocate temporary buffers.
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(window_width,
-								 window_height);
+                                                                 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(window_width,
-								 window_height);
+                                                                 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(window_width,
-								 window_height);
+                                                                 window_height);
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(window_width,
-								 window_height);
+                                                                 window_height);
 
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
@@ -82,10 +82,10 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 // Here, the viewer is launched and the views are rendered.
 void RunViewer(Mesh &mesh, const ViewSetting *view_setting) {
   // Plot the mesh.
-  igl::viewer::Viewer viewer;			    // Create a viewer.
+  igl::viewer::Viewer viewer;                       // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
   LOG(DEBUG) << "RunViewer: #mesh.colors = " << mesh.colors.rows()
-	     << " #mesh.vertices = " << mesh.vertices.rows() << "\n";
+             << " #mesh.vertices = " << mesh.vertices.rows() << "\n";
   if (mesh.colors.rows() > 0 && mesh.colors.rows() == mesh.vertices.rows()) {
     viewer.data.set_colors(mesh.colors);
   }
@@ -94,10 +94,10 @@ void RunViewer(Mesh &mesh, const ViewSetting *view_setting) {
       std::bind(ViewerInit, std::placeholders::_1, view_setting);
   viewer.callback_pre_draw =
       std::bind(ViewerPreDraw, std::placeholders::_1, &mesh,
-		view_setting);  // Bind callback.
+                view_setting);  // Bind callback.
   viewer.callback_post_draw =
       std::bind(ViewerPostDraw, std::placeholders::_1, &mesh,
-		view_setting);  // Bind callback.
+                view_setting);  // Bind callback.
   viewer.launch(true, false);
 }
 
@@ -145,7 +145,7 @@ int main(int argc, char *argv[]) {
 
   // Load a triangular mesh format.
   igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
-			  mesh.basename, mesh.extension, mesh.filename);
+                          mesh.basename, mesh.extension, mesh.filename);
 
   if (use_decimate) {
     // Decimate.
@@ -159,7 +159,7 @@ int main(int argc, char *argv[]) {
     birth_vertex_indices.resize(mesh.vertices.rows());
 
     igl::qslim(mesh.vertices, mesh.faces, max_faces, decimated_mesh.vertices,
-	       decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
+               decimated_mesh.faces, birth_face_indices, birth_vertex_indices);
     mesh.vertices = decimated_mesh.vertices;
     mesh.faces = decimated_mesh.faces;
   }
@@ -174,11 +174,11 @@ int main(int argc, char *argv[]) {
   if (use_gaussian) {
     // Smooth.
     Eigen::MatrixXd smoothed_vertices(mesh.vertices.rows(),
-				      mesh.vertices.cols());
+                                      mesh.vertices.cols());
     double sigma = 0.002 *
-		   (mesh.vertices.colwise().maxCoeff() -
-		    mesh.vertices.colwise().minCoeff())
-		       .norm();
+                   (mesh.vertices.colwise().maxCoeff() -
+                    mesh.vertices.colwise().minCoeff())
+                       .norm();
     double scale = 1.0 * sigma * sigma;
     for (int i = 0; i < mesh.vertices.rows(); ++i) {
       Eigen::VectorXd result;
@@ -203,8 +203,8 @@ int main(int argc, char *argv[]) {
     double max_spectrum = spectrum.maxCoeff();
     double avg_spectrum = spectrum.mean();
     LOG(DEBUG) << "min_spectrum = " << min_spectrum
-	       << " max_spectrum = " << max_spectrum
-	       << " avg_spectrum = " << avg_spectrum << "\n";
+               << " max_spectrum = " << max_spectrum
+               << " avg_spectrum = " << avg_spectrum << "\n";
     igl::jet(spectrum, spectrum.minCoeff(), spectrum.maxCoeff(), mesh.colors);
   } else if (display_saliency) {
     Eigen::VectorXd saliency(mesh.vertices.rows());
@@ -219,16 +219,16 @@ int main(int argc, char *argv[]) {
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
     ComputeLogLaplacianSpectrum(mesh.vertices, mesh.faces, solver, spectrum);
     mesh.colors.resize(mesh.vertices.rows(), 3);
-    eigenvector = solver.eigenvectors().col(2);
+    eigenvector = solver.eigenvectors().col(1);
     double min_eigenvector = eigenvector.minCoeff();
     double max_eigenvector = eigenvector.maxCoeff();
     double avg_eigenvector = eigenvector.mean();
     LOG(DEBUG) << std::setprecision(16)
-	       << "min_eigenvector = " << min_eigenvector
-	       << " max_eigenvector = " << max_eigenvector
-	       << " avg_eigenvector = " << avg_eigenvector << "\n";
+               << "min_eigenvector = " << min_eigenvector
+               << " max_eigenvector = " << max_eigenvector
+               << " avg_eigenvector = " << avg_eigenvector << "\n";
     igl::jet(eigenvector, eigenvector.minCoeff(), eigenvector.maxCoeff(),
-	     mesh.colors);
+             mesh.colors);
   } else if (display_irregularity) {
     Eigen::VectorXd irregularity(mesh.vertices.rows());
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> solver;
@@ -238,10 +238,10 @@ int main(int argc, char *argv[]) {
     double max_irregularity = irregularity.maxCoeff();
     double avg_irregularity = irregularity.mean();
     LOG(DEBUG) << "min_irregularity = " << min_irregularity
-	       << " max_irregularity = " << max_irregularity
-	       << " avg_irregularity = " << avg_irregularity << "\n";
+               << " max_irregularity = " << max_irregularity
+               << " avg_irregularity = " << avg_irregularity << "\n";
     igl::jet(irregularity, irregularity.minCoeff(), irregularity.maxCoeff(),
-	     mesh.colors);
+             mesh.colors);
   } else if (display_saliency_eigenvector) {
     Eigen::VectorXd saliency_eigenvector(mesh.vertices.rows());
     Eigen::MatrixXd saliency(mesh.vertices.rows(), mesh.vertices.rows());
@@ -249,29 +249,29 @@ int main(int argc, char *argv[]) {
     ComputeMeshSaliencyMatrix(mesh.vertices, mesh.faces, saliency);
     solver.compute(saliency);
     saliency_eigenvector = solver.eigenvectors().col(0).unaryExpr(
-	[](const std::complex<double> &c) -> double { return std::abs(c); });
+        [](const std::complex<double>& x) -> double { return std::abs(x); });
     mesh.colors.resize(mesh.vertices.rows(), 3);
     double min_saliency_eigenvector = saliency_eigenvector.minCoeff();
     double max_saliency_eigenvector = saliency_eigenvector.maxCoeff();
     double avg_saliency_eigenvector = saliency_eigenvector.mean();
     LOG(DEBUG) << "min_saliency_eigenvector = " << min_saliency_eigenvector
-	       << " max_saliency_eigenvector = " << max_saliency_eigenvector
-	       << " avg_saliency_eigenvector = " << avg_saliency_eigenvector
-	       << "\n";
+               << " max_saliency_eigenvector = " << max_saliency_eigenvector
+               << " avg_saliency_eigenvector = " << avg_saliency_eigenvector
+               << "\n";
     igl::jet(saliency_eigenvector, saliency_eigenvector.minCoeff(),
-	     saliency_eigenvector.maxCoeff(), mesh.colors);
+             saliency_eigenvector.maxCoeff(), mesh.colors);
   }
 
   LOG(DEBUG) << "Compute stats: bounds.min = " << mesh.bounds.lo
-	     << " bounds.max = " << mesh.bounds.hi << " extent = " << extent
-	     << "\n";
+             << " bounds.max = " << mesh.bounds.hi << " extent = " << extent
+             << "\n";
 
   LOG(DEBUG) << "Normalize mesh.\n";
 
   ViewSetting view_setting =
       ViewSetting(window_width, window_height, Eigen::Vector3d(0.0, 0.0, 3.0),
-		  Eigen::Vector3d(0.0, 1.0, 0.0), false, 0.0001, 100, 45.0,
-		  Eigen::Vector3d(0.0, 0.0, 0.0));
+                  Eigen::Vector3d(0.0, 1.0, 0.0), false, 0.0001, 100, 45.0,
+                  Eigen::Vector3d(0.0, 0.0, 0.0));
   RunViewer(mesh, &view_setting);
   return 0;
 }

@@ -1,7 +1,10 @@
 #pragma once
 
-#include <Eigen/Dense>
+#include "geometry.h"
+
 #include <vector>
+
+#include <Eigen/Dense>
 
 namespace view_setting {
 
@@ -9,10 +12,10 @@ namespace view_setting {
 struct ViewSetting {
   ViewSetting() {}
   ViewSetting(int screen_width, int screen_height,
-              const Eigen::Vector3d& eye_position,
-              const Eigen::Vector3d& up_vector, bool is_orthographic,
+              const Eigen::Vector3d &eye_position,
+              const Eigen::Vector3d &up_vector, bool is_orthographic,
               double near_value, double far_value, double angle,
-              const Eigen::Vector3d& center)
+              const Eigen::Vector3d &center)
       : width(screen_width),
         height(screen_height),
         eye(eye_position),
@@ -48,4 +51,20 @@ enum RenderSampleType {
   kNumRenderSampleTypes
 };
 
+// Generate uniform randle samples.
+void GenerateUniformRandomSamples(int num_samples,
+                                  std::vector<Eigen::Vector3d> *samples);
+
+// Generate cylindrical samples in the XZ plane.
+void GenerateCylindricalSamples(int num_samples,
+                                std::vector<Eigen::Vector3d> *samples);
+
+// Generate samples using the vertices of an icosahedron.
+void GenerateIcosahedronSamples(std::vector<Eigen::Vector3d> *samples);
+
+// Generate a batch of render view_settings.
+// Using the input mesh, there will be n view_settings generated.
+void GenerateViewSettings(const geometry::Mesh *mesh,
+                          RenderSampleType sample_type, int num_samples,
+                          ViewSettings *view_settings);
 }  // namespace view_setting

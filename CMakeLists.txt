@@ -8,9 +8,11 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 # Set C++ flags.
+#set(CMAKE_CXX_FLAGS 
+  #"${CMAKE_CXX_FLAGS} -std=c++11 -g -fsanitize=address\
+  #-fno-omit-frame-pointer -Wno-macro-redefined")
 set(CMAKE_CXX_FLAGS 
-  "${CMAKE_CXX_FLAGS} -std=c++11 -g -fsanitize=address\
-  -fno-omit-frame-pointer -Wno-macro-redefined")
+  "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -Wno-macro-redefined")
 
 # Set the module path (mainly for FindXXX.cmake files)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
@@ -51,7 +53,7 @@ include_directories(${EIGEN3_INCLUDE_DIRS})
 #message(STATUS "LIBIGL_PNG_EXTRA_LIBRARIES=${LIBIGL_PNG_EXTRA_LIBRARIES}")
 
 # Compile and link render_views executable.
-add_executable(render_views render_views.cc)
+add_executable(render_views render_views.cc view_setting.cc)
 target_link_libraries(render_views ${LIBIGL_LIBRARIES}
                           ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
                           ${LIBIGL_OPENGL_EXTRA_LIBRARIES}
@@ -68,7 +70,11 @@ target_link_libraries(backproject_saliency ${LIBIGL_LIBRARIES}
                           ${LIBIGL_PNG_EXTRA_LIBRARIES}
                           ${LIBIGL_EMBREE_EXTRA_LIBRARIES})
 # Compile and link spectral_saliency executable.
-add_executable(spectral_saliency spectral_saliency.cc geometry_processing.cc)
+add_executable(spectral_saliency 
+                        spectral_saliency.cc
+                        geometry_processing.cc
+                        view_setting.cc)
+
 target_link_libraries(spectral_saliency ${LIBIGL_LIBRARIES}
                           ${LIBIGL_VIEWER_EXTRA_LIBRARIES}
                           ${LIBIGL_OPENGL_EXTRA_LIBRARIES}

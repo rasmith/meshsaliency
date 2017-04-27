@@ -38,8 +38,6 @@ double ComputeAveragePairwiseDistance(const Eigen::MatrixXd &vertices) {
   return result;
 }
 
-const static double kPi = 3.141592653589793238;
-
 double ComputeGaussian(double x, double scale) {
   double inv = 1.0 / sqrt(2.0 * kPi * scale);
   return inv * exp(-(x * x) / (2.0 * scale));
@@ -220,6 +218,36 @@ void ComputeWeightedAdjacency(const Eigen::MatrixXd &vertices,
   weighted_adjacency.setFromTriplets(triples.begin(), triples.end());
 }
 
+void ComputeWeightedDegree(
+    const Eigen::SparseMatrix<double> &weighted_adjacency,
+    Eigen::SparseMatrix<double> &weighted_degree) {
+  weighted_degree.resize(weighted_adjacency.rows(), weighted_adjacency.cols());
+  weighted_degree.setZero();
+  std::vector<Eigen::Triplet<double>> triples;
+  for (int i = 0; i < weighted_adjacency.rows(); ++i) {
+    float sum = weighted_adjacency.row(i).sum();
+    triples.push_back(Eigen::Triplet<double>(i, i, sum));
+  }
+  weighted_degree.setFromTriplets(triples.begin(), triples.end());
+}
+
+void ComputeNormalizedLaplacian(
+    const Eigen::SparseMatrix<double> &weighted_adjacency,
+    const Eigen::SparseMatrix<double> &weighted_degree,
+    Eigen::SparseMatrix<double> &normalized_laplacian) {
+  Eigen::SparseMatrix<double> laplacian = weighted_degree - weighted_adjacency;
+  Eigen::SparseMatrix<double> inverse_square_root =
+      weighted_degree.unaryExpr([](const double &x) -> double {
+        return (x == 0.0 ? 0.0 : 1.0 / sqrt(x));
+      });
+  normalized_laplacian.resize(weighted_adjacency.rows(),
+                              weighted_adjacency.cols());
+  normalized_laplacian.setZero();
+  normalized_laplacian.setIdentity();
+  normalized_laplacian -=
+      inverse_square_root * weighted_adjacency * inverse_square_root;
+}
+
 void ComputeDegrees(const Eigen::MatrixXd &vertices,
                     const Eigen::MatrixXi &indices,
                     Eigen::VectorXi &vertex_degrees) {
@@ -270,22 +298,23 @@ void ComputeLogLaplacianSpectrum(
     const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> &solver,
     Eigen::VectorXd &log_laplacian_spectrum) {
-  // NOTE: Need to compute Laplacian ourself since libigl is not computing the
   // variant we need.
-  Eigen::SparseMatrix<double> weighted_adjacency;
+  Eigen::SparseMatrix<double> weighted_adjacency(vertices.rows(),
+                                                 vertices.rows());
   ComputeWeightedAdjacency(vertices, indices, weighted_adjacency);
-   for (int i = 0; i < vertices.rows(); ++i) {
-   double sum = weighted_adjacency.row(i).sum();
-   weighted_adjacency.row(i) /= sum;
-  }
 
-  Eigen::SparseMatrix<double> degrees;
-  ComputeDegreeMatrix(vertices, indices, degrees);
-  Eigen::SparseMatrix<double> laplacian = weighted_adjacency - degrees;
+  Eigen::SparseMatrix<double> normalized_laplacian(vertices.rows(),
+                                                   vertices.rows());
+  Eigen::SparseMatrix<double> weighted_degree(vertices.rows(), vertices.rows());
+  ComputeWeightedDegree(weighted_adjacency, weighted_degree);
+  ComputeNormalizedLaplacian(weighted_adjacency, weighted_degree,
+                             normalized_laplacian);
+  normalized_laplacian = weighted_degree - weighted_adjacency;
 
-  solver.compute(laplacian);
+  solver.compute(normalized_laplacian);
   Eigen::VectorXd eigenvalues = solver.eigenvalues();
-  LOG(DEBUG) << "Smallest eigenvalue = " << eigenvalues(0) << "\n";
+  //LOG(DEBUG) << "Smallest eigenvalue = " << eigenvalues(0) << "\n";
+
   log_laplacian_spectrum = eigenvalues.unaryExpr(
       [](double x) -> double { return std::log(std::abs(x)); });
 }
@@ -312,6 +341,9 @@ void ComputeMeshIrregularity(
   average /= static_cast<double>(filter_size);
   // Compute the spectral irregularity, R(f).
   irregularity = (log_laplacian_spectrum - average).cwiseAbs();
+  //for (int i = 0; i < vertices.rows(); ++i) {
+    //LOG(DEBUG) << "irregularity(" << i << ")=" << irregularity(i) << "\n";
+  //}
 }
 
 void ComputeMeshSaliencyMatrix(const Eigen::MatrixXd &vertices,
@@ -325,17 +357,25 @@ void ComputeMeshSaliencyMatrix(const Eigen::MatrixXd &vertices,
   Eigen::VectorXd r_diagonal =
       irregularity.unaryExpr([](double x) -> double { return std::exp(x); });
   // Compute weighted adjacency matrix, W.
-  Eigen::SparseMatrix<double> weighted_adjacency;
+  Eigen::SparseMatrix<double> weighted_adjacency(vertices.rows(),
+                                                 vertices.rows());
   ComputeWeightedAdjacency(vertices, indices, weighted_adjacency);
-  // Normalize.
-   for (int i = 0; i < vertices.rows(); ++i) {
-   double sum = weighted_adjacency.row(i).sum();
-   weighted_adjacency.row(i) /= sum;
-  }
+  // Normalize W so the rows sum to 1.
+  Eigen::SparseMatrix<double> weighted_degree(vertices.rows(), vertices.rows());
+  ComputeWeightedDegree(weighted_adjacency, weighted_degree);
+  Eigen::SparseMatrix<double> inverse_weighted_degree =
+      weighted_degree.unaryExpr(
+          [](const double &x) -> double { return (x == 0.0 ? 0.0 : 1.0 / x); });
+  Eigen::SparseMatrix<double> normalized_adjacency =
+      weighted_adjacency;
+  //for (int i = 0; i < normalized_adjacency.rows(); ++i) {
+    //float sum = normalized_adjacency.row(i).sum();
+    //assert(std::abs(sum - 1.0) < 1e-5);
+  //}
   // Compute the saliency S = B*R*B^T * W.
   Eigen::MatrixXd lhs = solver.eigenvectors() * r_diagonal.asDiagonal() *
                         solver.eigenvectors().transpose();
-  saliency = (lhs * weighted_adjacency);
+  saliency = lhs.cwiseProduct(normalized_adjacency);
 }
 
 void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
@@ -343,7 +383,7 @@ void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
                          Eigen::VectorXd &saliency) {
   Eigen::MatrixXd saliency_matrix(vertices.rows(), vertices.rows());
   ComputeMeshSaliencyMatrix(vertices, indices, saliency_matrix);
-  saliency = saliency_matrix.rowwise().sum();
+  saliency = saliency_matrix.colwise().sum();
 }
 
 void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
