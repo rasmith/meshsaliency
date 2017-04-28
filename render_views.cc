@@ -12,7 +12,6 @@
 #include <igl/read_triangle_mesh.h>
 #include <igl/viewer/Viewer.h>
 
-
 using geometry::BoundingBox;
 using geometry::Mesh;
 using std::placeholders::_1;
@@ -27,7 +26,6 @@ int window_width = 256;
 int window_height = 256;
 
 std::string output_directory;
-
 
 // This is the Viewer initialization callback.
 bool ViewerInit(igl::viewer::Viewer &viewer) {
@@ -165,11 +163,11 @@ int main(int argc, char *argv[]) {
 
   // Make a mesh struct.
   Mesh mesh;
-	mesh.path = model_path;
+  mesh.path = model_path;
 
   // Load a triangular mesh format.
   igl::read_triangle_mesh(mesh.path, mesh.vertices, mesh.faces, mesh.directory,
-			  mesh.basename, mesh.extension, mesh.filename);
+                          mesh.basename, mesh.extension, mesh.filename);
 
   // Get the minimum and maximum extents.
   mesh.bounds.lo = mesh.vertices.colwise().minCoeff();
@@ -188,7 +186,8 @@ int main(int argc, char *argv[]) {
 
   // Setup a render view_settings.
   ViewSettings view_settings;
-  GenerateViewSettings(&mesh, sample_type, num_samples, &view_settings);
+  GenerateViewSettings(&mesh, sample_type, num_samples, window_width,
+                       window_height & view_settings);
   RunViewer(mesh, view_settings);
   return 0;
 }

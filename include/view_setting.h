@@ -11,6 +11,15 @@ namespace view_setting {
 // Each view will have a render view_setting associated with it.
 struct ViewSetting {
   ViewSetting() {}
+  ViewSetting(const ViewSetting &v)
+      : height(v.height),
+        width(v.width),
+        eye(v.eye),
+        up(v.up),
+        orthographic(v.orthographic),
+        near(v.near),
+        far(v.far),
+        view_angle(v.view_angle) {}
   ViewSetting(int screen_width, int screen_height,
               const Eigen::Vector3d &eye_position,
               const Eigen::Vector3d &up_vector, bool is_orthographic,
@@ -38,8 +47,10 @@ struct ViewSetting {
 
 // Render view_settings are grouped into batches.
 struct ViewSettings {
+  ViewSettings() : view_setting_list(), which(0), is_sampled(false) {}
   std::vector<ViewSetting> view_setting_list;
   int which;
+  bool is_sampled;
 };
 
 // Sampling type for render views.
@@ -63,8 +74,7 @@ void GenerateCylindricalSamples(int num_samples,
 void GenerateIcosahedronSamples(std::vector<Eigen::Vector3d> *samples);
 
 // Generate a batch of render view_settings.
-// Using the input mesh, there will be n view_settings generated.
 void GenerateViewSettings(const geometry::Mesh *mesh,
                           RenderSampleType sample_type, int num_samples,
-                          ViewSettings *view_settings);
+                          int width, int height, ViewSettings *view_settings);
 }  // namespace view_setting

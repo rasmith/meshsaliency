@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <functional>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -33,18 +34,47 @@ using view_setting::ViewSettings;
 int window_width = 256;
 int window_height = 256;
 
-std::string input_directory;
+std::string output_directory;
 bool run_view_sampling = false;
+
+void SaveViewerSettings(const igl::viewer::Viewer &viewer,
+                        const std::string &file_name) {
+  std::ofstream out(file_name);
+  if (!out.good()) {
+    LOG(DEBUG) << "Bad file handle.\n";
+    exit(0);
+  }
+  Eigen::IOFormat format(Eigen::FullPrecision, 0, ",", ",");
+  out << "width " << window_width << "\n";
+  out << "height " << window_height << "\n";
+  out << "eye  " << viewer.core.camera_eye.format(format) << "\n";
+  out << "up " << viewer.core.camera_up.format(format) << "\n";
+  out << "orthographic " << viewer.core.orthographic << "\n";
+  out << "near " << viewer.core.camera_dnear << "\n";
+  out << "far " << viewer.core.camera_dfar << "\n";
+  out << "view_angle " << viewer.core.camera_view_angle << "\n";
+  out << "camera_center " << viewer.core.camera_center.format(format) << "\n";
+  out.close();
+}
 
 // This is the Viewer initialization callback.
 bool ViewerInit(igl::viewer::Viewer &viewer,
                 const ViewSettings *view_settings) {
+  LOG(DEBUG) << "ViewerInit\n";
   if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   const ViewSetting *view_setting =
       &view_settings->view_setting_list[view_settings->which];
-  window_width = view_setting->width;
-  window_height = view_setting->height;
+  if (!run_view_sampling) {
+    window_width = view_setting->width;
+    window_height = view_setting->height;
+  }
+  // LOG(DEBUG) << "view_setting->which = " << view_settings->which << "\n"
+  //<< " view_setting->width = " << view_setting->width << "\n"
+  //<< " view_setting->height = " << view_setting->height << "\n"
+  //<< " window_height = " << window_height << "\n"
+  //<< " window_width = " << window_width << "\n";
+  // exit(0);
   // Set the window size and viewport before drawing begins.
   glfwSetWindowSize(viewer.window, window_width, window_height);
   glViewport(0, 0, window_width, window_height);
@@ -54,6 +84,7 @@ bool ViewerInit(igl::viewer::Viewer &viewer,
 // This is a pre render callback for the Viewr class.
 bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
                    const ViewSettings *view_settings) {
+  LOG(DEBUG) << "ViewerPreDraw\n";
   if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   const ViewSetting *view_setting =
@@ -70,11 +101,19 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
 
 // This callback will run until all view_settinged views have been rendered.
 bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
-                    const ViewSettings *view_settings) {
-  if (view_settings->which >= view_settings->view_setting_list.size())
-    return false;
-  const ViewSetting *view_setting =
-      &view_settings->view_setting_list[view_settings->which];
+                    ViewSettings *view_settings) {
+  LOG(DEBUG) << "ViewerPostDraw\n";
+  if (view_settings->is_sampled) {
+    // If no more views to render, make sure the Viewer class exits.
+    if (view_settings->which >= view_settings->view_setting_list.size()) {
+      // This tells GLFW to close, the main render loop in Viewer will halt.
+      glfwSetWindowShouldClose(viewer.window, true);
+      // Push an empty event to make the Viewer class process another event.
+      glfwPostEmptyEvent();
+      return false;
+    }
+  }
+
   // Allocate temporary buffers.
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(window_width,
                                                                  window_height);
@@ -85,16 +124,34 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(window_width,
                                                                  window_height);
 
+  // Draw the scene in the buffers.
+  ViewSetting *view_setting =
+      &view_settings->view_setting_list[view_settings->which];
   viewer.core.draw_buffer(viewer.data, viewer.opengl, false, R, G, B, A);
 
-  // Post an empty event so igl::viewer::Viewer will continue to pump events
-  // and render the next view.
-  glfwPostEmptyEvent();
+  if (view_settings->is_sampled) {
+    std::string which_str = std::to_string(view_settings->which);
+    std::string png_file_path =
+        output_directory + "/png/out" + which_str + ".png";
+    LOG(DEBUG) << "Saving PNG file to :'" << png_file_path << "\n";
+    // Save it to a PNG.
+    igl::png::writePNG(R, G, B, A, png_file_path);
+    std::string cfg_file_path =
+        output_directory + "/cfg/out" + which_str + ".cfg";
+    LOG(DEBUG) << "Saving CFG file to :'" << cfg_file_path << "\n";
+    // Save the camera settings.
+    SaveViewerSettings(viewer, cfg_file_path);
+    ++view_settings->which;
+
+    // Post an empty event so igl::viewer::Viewer will continue to pump events
+    // and render the next view.
+    glfwPostEmptyEvent();
+  }
   return false;
 }
 
 // Here, the viewer is launched and the views are rendered.
-void RunViewer(Mesh &mesh, const ViewSettings *view_settings) {
+void RunViewer(Mesh &mesh, ViewSettings *view_settings) {
   // Plot the mesh.
   igl::viewer::Viewer viewer;                       // Create a viewer.
   viewer.data.set_mesh(mesh.vertices, mesh.faces);  // Set mesh data.
@@ -130,6 +187,8 @@ int main(int argc, char *argv[]) {
   if (argc > 2) {
     run_view_sampling = true;
 
+    // Get the output directory.
+    output_directory = std::string(argv[++argv_index]);
     // Get the sample type.
     sample_type = static_cast<RenderSampleType>(
         std::stoi(std::string(argv[++argv_index])));
@@ -139,6 +198,10 @@ int main(int argc, char *argv[]) {
     // Get the window width and height and save it.
     window_width = std::stoi(std::string(argv[++argv_index]));
     window_height = std::stoi(std::string(argv[++argv_index]));
+    LOG(DEBUG) << "output_directory=  " << output_directory
+               << "sample_type = " << sample_type
+               << " window_height = " << window_height
+               << " window_width = " << window_width << "\n";
   }
 
   // Make a mesh struct.
@@ -188,13 +251,21 @@ int main(int argc, char *argv[]) {
   mesh.bounds.hi /= extent;
   mesh.bounds.lo /= extent;
 
+  ViewSettings view_settings;
   ViewSetting view_setting =
       ViewSetting(window_width, window_height, Eigen::Vector3d(0.0, 0.0, 3.0),
                   Eigen::Vector3d(0.0, 1.0, 0.0), false, 0.0001, 100, 45.0,
                   Eigen::Vector3d(0.0, 0.0, 0.0));
-  ViewSettings view_settings;
-  view_settings.view_setting_list.push_back(view_setting);
-  view_settings.which = 0;
+  view_settings.is_sampled = run_view_sampling;
+  if (run_view_sampling) {
+    // Setup a render view_settings.
+    LOG(DEBUG) << "GenerateViewSettings\n";
+    GenerateViewSettings(&mesh, sample_type, num_samples, window_width,
+                         window_height, &view_settings);
+  } else {
+    view_settings.view_setting_list.push_back(view_setting);
+    view_settings.which = 0;
+  }
 
   RunViewer(mesh, &view_settings);
   return 0;
