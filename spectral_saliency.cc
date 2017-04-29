@@ -37,6 +37,10 @@ int window_height = 256;
 std::string output_directory;
 bool run_view_sampling = false;
 
+void RgbToLuma(const Eigen::Vector3d &rgb, double &luma) {
+  luma = 0.299 * rgb(0) + 0.587 * rgb(1) + 0.1146 * rgb(2);
+}
+
 void SaveViewerSettings(const igl::viewer::Viewer &viewer,
                         const std::string &file_name) {
   std::ofstream out(file_name);
@@ -90,6 +94,8 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
   const ViewSetting *view_setting =
       &view_settings->view_setting_list[view_settings->which];
   viewer.core.camera_eye = view_setting->eye.cast<float>();
+  //viewer.core.light_position = viewer.core.camera_eye;
+  viewer.core.lighting_factor = 0.0;
   viewer.core.camera_up = view_setting->up.cast<float>();
   viewer.core.orthographic = view_setting->orthographic;
   viewer.core.camera_dnear = view_setting->near;
@@ -132,15 +138,15 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
   if (view_settings->is_sampled) {
     std::string which_str = std::to_string(view_settings->which);
     std::string png_file_path =
-        output_directory + "/png/out" + which_str + ".png";
+        output_directory + "/sal/out" + which_str + ".png";
     LOG(DEBUG) << "Saving PNG file to :'" << png_file_path << "\n";
     // Save it to a PNG.
     igl::png::writePNG(R, G, B, A, png_file_path);
-    std::string cfg_file_path =
-        output_directory + "/cfg/out" + which_str + ".cfg";
-    LOG(DEBUG) << "Saving CFG file to :'" << cfg_file_path << "\n";
-    // Save the camera settings.
-    SaveViewerSettings(viewer, cfg_file_path);
+    //std::string cfg_file_path =
+        //output_directory + "/cfg/out" + which_str + ".cfg";
+    //LOG(DEBUG) << "Saving CFG file to :'" << cfg_file_path << "\n";
+    //// Save the camera settings.
+    //SaveViewerSettings(viewer, cfg_file_path);
     ++view_settings->which;
 
     // Post an empty event so igl::viewer::Viewer will continue to pump events
@@ -184,6 +190,7 @@ int main(int argc, char *argv[]) {
   RenderSampleType sample_type;
   int num_samples;
 
+  LOG(DEBUG) << "model_path = " << model_path << "\n";
   if (argc > 2) {
     run_view_sampling = true;
 
@@ -198,10 +205,10 @@ int main(int argc, char *argv[]) {
     // Get the window width and height and save it.
     window_width = std::stoi(std::string(argv[++argv_index]));
     window_height = std::stoi(std::string(argv[++argv_index]));
-    LOG(DEBUG) << "output_directory=  " << output_directory
-               << "sample_type = " << sample_type
-               << " window_height = " << window_height
-               << " window_width = " << window_width << "\n";
+    LOG(DEBUG) << "output_directory=  " << output_directory << "\n"
+               << "sample_type = " << sample_type << "\n"
+               << "window_height = " << window_height << "\n"
+               << "window_width = " << window_width << "\n";
   }
 
   // Make a mesh struct.
@@ -235,9 +242,16 @@ int main(int argc, char *argv[]) {
   Eigen::VectorXd saliency(mesh.vertices.rows());
 
   ComputeMultiScaleSaliency(mesh, max_faces, scales, num_scales, saliency);
-  LOG(DEBUG) << "Compute jet colors.\n";
+  // LOG(DEBUG) << "Compute jet colors.\n";
   mesh.colors.resize(mesh.vertices.rows(), 3);
-  igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
+  double min_saliency = saliency.minCoeff();
+  double max_saliency = saliency.maxCoeff();
+  //  igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
+  for (int i = 0; i < mesh.colors.rows(); ++i) {
+    double value = 
+        (saliency(i) - min_saliency) / (max_saliency - min_saliency);
+    mesh.colors.row(i) = Eigen::Vector3d(value, value, value);
+  }
   LOG(DEBUG) << "#mesh.colors() = " << mesh.colors.rows() << "\n";
 
   LOG(DEBUG) << "Normalize mesh.\n";
