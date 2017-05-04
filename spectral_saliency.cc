@@ -24,6 +24,8 @@
 #include <pcl/filters/convolution_3d.h>
 #include <pcl/point_types.h>
 
+#define USE_JET
+
 using geometry::BoundingBox;
 using geometry::Mesh;
 using std::placeholders::_1;
@@ -36,10 +38,6 @@ int window_height = 256;
 
 std::string output_directory;
 bool run_view_sampling = false;
-
-void RgbToLuma(const Eigen::Vector3d &rgb, double &luma) {
-  luma = 0.299 * rgb(0) + 0.587 * rgb(1) + 0.1146 * rgb(2);
-}
 
 void SaveViewerSettings(const igl::viewer::Viewer &viewer,
                         const std::string &file_name) {
@@ -64,20 +62,18 @@ void SaveViewerSettings(const igl::viewer::Viewer &viewer,
 // This is the Viewer initialization callback.
 bool ViewerInit(igl::viewer::Viewer &viewer,
                 const ViewSettings *view_settings) {
-  LOG(DEBUG) << "ViewerInit\n";
+  // LOG(DEBUG) << "ViewerInit\n";
   if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   const ViewSetting *view_setting =
       &view_settings->view_setting_list[view_settings->which];
-  if (!run_view_sampling) {
-    window_width = view_setting->width;
-    window_height = view_setting->height;
-  }
-  // LOG(DEBUG) << "view_setting->which = " << view_settings->which << "\n"
-  //<< " view_setting->width = " << view_setting->width << "\n"
-  //<< " view_setting->height = " << view_setting->height << "\n"
-  //<< " window_height = " << window_height << "\n"
-  //<< " window_width = " << window_width << "\n";
+  window_width = view_setting->width;
+  window_height = view_setting->height;
+  LOG(DEBUG) << "view_setting->which = " << view_settings->which << "\n"
+             << " view_setting->width = " << view_setting->width << "\n"
+             << " view_setting->height = " << view_setting->height << "\n"
+             << " window_height = " << window_height << "\n"
+             << " window_width = " << window_width << "\n";
   // exit(0);
   // Set the window size and viewport before drawing begins.
   glfwSetWindowSize(viewer.window, window_width, window_height);
@@ -88,27 +84,41 @@ bool ViewerInit(igl::viewer::Viewer &viewer,
 // This is a pre render callback for the Viewr class.
 bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
                    const ViewSettings *view_settings) {
-  LOG(DEBUG) << "ViewerPreDraw\n";
+  // LOG(DEBUG) << "ViewerPreDraw\n";
   if (view_settings->which >= view_settings->view_setting_list.size())
     return false;
   const ViewSetting *view_setting =
       &view_settings->view_setting_list[view_settings->which];
   viewer.core.camera_eye = view_setting->eye.cast<float>();
-  //viewer.core.light_position = viewer.core.camera_eye;
-  viewer.core.lighting_factor = 0.0;
+  if (run_view_sampling) viewer.core.lighting_factor = 0.0;
   viewer.core.camera_up = view_setting->up.cast<float>();
   viewer.core.orthographic = view_setting->orthographic;
   viewer.core.camera_dnear = view_setting->near;
   viewer.core.camera_dfar = view_setting->far;
   viewer.core.camera_view_angle = view_setting->view_angle;
   viewer.core.camera_center = view_setting->camera_center.cast<float>();
+  static bool once = false;
+  if (!once) {
+    LOG(DEBUG) << "viewer.core.camera_up =" << view_setting->up.cast<float>()
+               << "\n";
+    LOG(DEBUG) << "viewer.core.orthographic =" << view_setting->orthographic
+               << "\n";
+    LOG(DEBUG) << "viewer.core.camera_dnear =" << view_setting->near << "\n";
+    LOG(DEBUG) << "viewer.core.camera_dfar =" << view_setting->far << "\n";
+    LOG(DEBUG) << "viewer.core.camera_view_angle =" << view_setting->view_angle
+               << "\n";
+    LOG(DEBUG) << "viewer.core.camera_center ="
+               << view_setting->camera_center.cast<float>() << "\n";
+    once = true;
+  }
+
   return false;
 }
 
 // This callback will run until all view_settinged views have been rendered.
 bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
                     ViewSettings *view_settings) {
-  LOG(DEBUG) << "ViewerPostDraw\n";
+  // LOG(DEBUG) << "ViewerPostDraw\n";
   if (view_settings->is_sampled) {
     // If no more views to render, make sure the Viewer class exits.
     if (view_settings->which >= view_settings->view_setting_list.size()) {
@@ -142,17 +152,16 @@ bool ViewerPostDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
     LOG(DEBUG) << "Saving PNG file to :'" << png_file_path << "\n";
     // Save it to a PNG.
     igl::png::writePNG(R, G, B, A, png_file_path);
-    //std::string cfg_file_path =
-        //output_directory + "/cfg/out" + which_str + ".cfg";
-    //LOG(DEBUG) << "Saving CFG file to :'" << cfg_file_path << "\n";
+    // std::string cfg_file_path =
+    // output_directory + "/cfg/out" + which_str + ".cfg";
+    // LOG(DEBUG) << "Saving CFG file to :'" << cfg_file_path << "\n";
     //// Save the camera settings.
-    //SaveViewerSettings(viewer, cfg_file_path);
+    // SaveViewerSettings(viewer, cfg_file_path);
     ++view_settings->which;
-
-    // Post an empty event so igl::viewer::Viewer will continue to pump events
-    // and render the next view.
-    glfwPostEmptyEvent();
   }
+  // Post an empty event so igl::viewer::Viewer will continue to pump events
+  // and render the next view.
+  glfwPostEmptyEvent();
   return false;
 }
 
@@ -246,12 +255,14 @@ int main(int argc, char *argv[]) {
   mesh.colors.resize(mesh.vertices.rows(), 3);
   double min_saliency = saliency.minCoeff();
   double max_saliency = saliency.maxCoeff();
-  //  igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
+#ifdef USE_JET
+  igl::jet(saliency, saliency.minCoeff(), saliency.maxCoeff(), mesh.colors);
+#elif
   for (int i = 0; i < mesh.colors.rows(); ++i) {
-    double value = 
-        (saliency(i) - min_saliency) / (max_saliency - min_saliency);
+    double value = (saliency(i) - min_saliency) / (max_saliency - min_saliency);
     mesh.colors.row(i) = Eigen::Vector3d(value, value, value);
   }
+#endif
   LOG(DEBUG) << "#mesh.colors() = " << mesh.colors.rows() << "\n";
 
   LOG(DEBUG) << "Normalize mesh.\n";

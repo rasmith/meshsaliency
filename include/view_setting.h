@@ -19,7 +19,8 @@ struct ViewSetting {
         orthographic(v.orthographic),
         near(v.near),
         far(v.far),
-        view_angle(v.view_angle) {}
+        view_angle(v.view_angle),
+        camera_center(v.camera_center) {}
   ViewSetting(int screen_width, int screen_height,
               const Eigen::Vector3d &eye_position,
               const Eigen::Vector3d &up_vector, bool is_orthographic,

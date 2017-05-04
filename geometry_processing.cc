@@ -298,25 +298,24 @@ void ComputeLogLaplacianSpectrum(
     const Eigen::MatrixXd &vertices, const Eigen::MatrixXi &indices,
     Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>> &solver,
     Eigen::VectorXd &log_laplacian_spectrum) {
-  // variant we need.
   Eigen::SparseMatrix<double> weighted_adjacency(vertices.rows(),
                                                  vertices.rows());
   ComputeWeightedAdjacency(vertices, indices, weighted_adjacency);
-
-  Eigen::SparseMatrix<double> normalized_laplacian(vertices.rows(),
-                                                   vertices.rows());
   Eigen::SparseMatrix<double> weighted_degree(vertices.rows(), vertices.rows());
   ComputeWeightedDegree(weighted_adjacency, weighted_degree);
-  ComputeNormalizedLaplacian(weighted_adjacency, weighted_degree,
-                             normalized_laplacian);
-  normalized_laplacian = weighted_degree - weighted_adjacency;
-
-  solver.compute(normalized_laplacian);
+  Eigen::SparseMatrix<double> laplacian = weighted_degree - weighted_adjacency;
+  Eigen::SparseMatrix<double> inverse_sqrt =
+      weighted_degree.unaryExpr([](const double &x) -> double {
+        return (x == 0.0 ? 0.0 : 1.0 / sqrt(x));
+      });
+  Eigen::SparseMatrix<double> symmetric_laplacian =
+      inverse_sqrt * laplacian * inverse_sqrt;
+  solver.compute(symmetric_laplacian);
   Eigen::VectorXd eigenvalues = solver.eigenvalues();
-  //LOG(DEBUG) << "Smallest eigenvalue = " << eigenvalues(0) << "\n";
-
   log_laplacian_spectrum = eigenvalues.unaryExpr(
       [](double x) -> double { return std::log(std::abs(x)); });
+  LOG(DEBUG) << "min_eigenvalues = " << eigenvalues.minCoeff() << "\n";
+  LOG(DEBUG) << "max_eigenvalues = " << eigenvalues.maxCoeff() << "\n";
 }
 
 void ComputeMeshIrregularity(
@@ -341,8 +340,8 @@ void ComputeMeshIrregularity(
   average /= static_cast<double>(filter_size);
   // Compute the spectral irregularity, R(f).
   irregularity = (log_laplacian_spectrum - average).cwiseAbs();
-  //for (int i = 0; i < vertices.rows(); ++i) {
-    //LOG(DEBUG) << "irregularity(" << i << ")=" << irregularity(i) << "\n";
+  // for (int i = 0; i < vertices.rows(); ++i) {
+  // LOG(DEBUG) << "irregularity(" << i << ")=" << irregularity(i) << "\n";
   //}
 }
 
@@ -367,11 +366,7 @@ void ComputeMeshSaliencyMatrix(const Eigen::MatrixXd &vertices,
       weighted_degree.unaryExpr(
           [](const double &x) -> double { return (x == 0.0 ? 0.0 : 1.0 / x); });
   Eigen::SparseMatrix<double> normalized_adjacency =
-      weighted_adjacency;
-  //for (int i = 0; i < normalized_adjacency.rows(); ++i) {
-    //float sum = normalized_adjacency.row(i).sum();
-    //assert(std::abs(sum - 1.0) < 1e-5);
-  //}
+      inverse_weighted_degree * weighted_adjacency;
   // Compute the saliency S = B*R*B^T * W.
   Eigen::MatrixXd lhs = solver.eigenvectors() * r_diagonal.asDiagonal() *
                         solver.eigenvectors().transpose();
@@ -384,6 +379,8 @@ void ComputeMeshSaliency(const Eigen::MatrixXd &vertices,
   Eigen::MatrixXd saliency_matrix(vertices.rows(), vertices.rows());
   ComputeMeshSaliencyMatrix(vertices, indices, saliency_matrix);
   saliency = saliency_matrix.colwise().sum();
+  LOG(DEBUG) << "min_saliency = " << saliency.minCoeff() << "\n";
+  LOG(DEBUG) << "max_saliency = " << saliency.maxCoeff() << "\n";
 }
 
 void ComputeMultiScaleSaliency(const geometry::Mesh &mesh, int max_faces,
