@@ -58,7 +58,7 @@ void GenerateViewSettings(const geometry::Mesh *mesh,
                           RenderSampleType sample_type, int num_samples,
                           int width, int height, ViewSettings *view_settings) {
   // The radius to use.
-  double radius = 2;
+  double radius = 10.0;
 
   // Generate samples.
   std::vector<Eigen::Vector3d> samples;

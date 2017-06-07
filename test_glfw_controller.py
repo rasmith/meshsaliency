@@ -8,7 +8,7 @@ app.init()
 
 multi_controller = GlfwMultiController()
 
-mesh_path = "living_room/model.obj"
+mesh_path = "obj/bunny.obj"
 mesh_fragment_shader = "mesh_fragment.glsl"
 mesh_vertex_shader = "mesh_vertex.glsl"
 

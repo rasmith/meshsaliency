@@ -46,6 +46,7 @@ bool ViewerPreDraw(igl::viewer::Viewer &viewer, const Mesh *mesh,
   viewer.core.camera_eye = view_setting->eye.cast<float>();
   viewer.core.camera_up = view_setting->up.cast<float>();
   viewer.core.camera_dnear = 0.0001f;
+  viewer.core.light_position = -viewer.core.camera_eye;
   return false;
 }
 
@@ -187,7 +188,7 @@ int main(int argc, char *argv[]) {
   // Setup a render view_settings.
   ViewSettings view_settings;
   GenerateViewSettings(&mesh, sample_type, num_samples, window_width,
-                       window_height & view_settings);
+                       window_height,  &view_settings);
   RunViewer(mesh, view_settings);
   return 0;
 }
