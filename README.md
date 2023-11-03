@@ -2,8 +2,8 @@
 
 ##Contributors
   * Hari Sridhar
-  * Randall Smith
-  * Soumyajit Gupta
+  * Randall Smith - spectral mesh saliency, datasest generation, rendering
+  * Soumyajit Gupta - machine learning
 
 ## Introduction
 Not much to say yet!
